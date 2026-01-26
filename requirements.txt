@@ -1,0 +1,6 @@
+nibabel
+matplotlib
+Pillow
+numpy
+pandas
+xlrd
