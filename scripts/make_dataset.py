@@ -35,11 +35,4 @@ def download_gcs_folder(bucket_name, gcs_folder_prefix, local_dir):
 
             # 4. Download
             blob.download_to_filename(local_path)
-            print(f"Downloaded: {local_file_name}")
-
-# Usage
-download_gcs_folder(
-    bucket_name='brain-age-mri-bucket', 
-    gcs_folder_prefix='imgs_folder/', 
-    local_dir='../data/raw'
-)
+            #print(f"Downloaded: {local_file_name}")
