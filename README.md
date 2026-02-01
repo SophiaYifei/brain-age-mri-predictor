@@ -14,4 +14,7 @@ source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# To install data from cloud storage
+python setup.py
 ```
