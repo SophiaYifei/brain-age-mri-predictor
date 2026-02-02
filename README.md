@@ -18,3 +18,12 @@ pip install -r requirements.txt
 # To install data from cloud storage
 python setup.py
 ```
+
+## Data
+Download the IXI dataset from https://brain-development.org/ixi-dataset/.
+
+- Choose **T1 images (all images)**.
+- Extract the archive.
+- Place the extracted folder under `data/raw/IXI_T1/`.
+
+After that, you can run the notebooks in `notebooks/`.
