@@ -67,3 +67,7 @@ tzdata==2025.3
 urllib3==2.6.3
 wcwidth==0.3.5
 xlrd==2.0.2
+scikit-learn
+grad-cam
+torch
+torchvision
