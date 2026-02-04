@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.linear_model import Ridge, ElasticNet
 
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import RegressionTarget
@@ -58,6 +59,104 @@ def show_gradcam(model, input_tensor, original_image):
 
 
 
+# --- Classical ML pipeline (PCA + Ridge/ElasticNet) ---
+
+BEST_PCA_COMPONENTS = 150
+BEST_ELASTICNET_ALPHA = 3.0
+BEST_ELASTICNET_L1_RATIO = 0.7
+
+
+def evaluate_rmse_mae(y_true, y_pred):
+    """Return RMSE and MAE for regression outputs."""
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    mae = mean_absolute_error(y_true, y_pred)
+    return {"RMSE": rmse, "MAE": mae}
+
+
+def get_classical_models(
+    ridge_alpha=1.0,
+    en_alpha=BEST_ELASTICNET_ALPHA,
+    en_l1_ratio=BEST_ELASTICNET_L1_RATIO,
+):
+    """Return Ridge and ElasticNet models with configurable hyperparameters."""
+    return {
+        "Ridge": Ridge(alpha=ridge_alpha),
+        "ElasticNet": ElasticNet(
+            alpha=en_alpha,
+            l1_ratio=en_l1_ratio,
+            random_state=42,
+        ),
+    }
+
+
+def train_and_eval_classical_models(
+    X_train,
+    y_train,
+    X_val,
+    y_val,
+    X_test,
+    y_test,
+    models_dict,
+):
+    """Train models and return metrics on val/test splits (RMSE/MAE)."""
+    results = []
+    for name, model in models_dict.items():
+        model.fit(X_train, y_train)
+        val_pred = model.predict(X_val)
+        test_pred = model.predict(X_test)
+
+        val_metrics = evaluate_rmse_mae(y_val, val_pred)
+        test_metrics = evaluate_rmse_mae(y_test, test_pred)
+
+        results.append({
+            "model": name,
+            "val_RMSE": val_metrics["RMSE"],
+            "val_MAE": val_metrics["MAE"],
+            "test_RMSE": test_metrics["RMSE"],
+            "test_MAE": test_metrics["MAE"],
+        })
+    return results
+
+
+def run_classical_pipeline(
+    modality="T1",
+    n_components=BEST_PCA_COMPONENTS,
+    ridge_alpha=1.0,
+    en_alpha=BEST_ELASTICNET_ALPHA,
+    en_l1_ratio=BEST_ELASTICNET_L1_RATIO,
+):
+    """
+    Train Ridge/ElasticNet on PCA features for one modality.
+
+    Uses precomputed split CSVs under scripts/.
+    """
+    from scripts import build_features
+
+    datasets = build_features.build_datasets_from_splits()
+    X_train, y_train, X_val, y_val, X_test, y_test = datasets[modality]
+    X_train_pca, X_val_pca, X_test_pca, _ = build_features.get_pca_features(
+        X_train,
+        X_val,
+        X_test,
+        n_components=n_components,
+    )
+
+    models_dict = get_classical_models(
+        ridge_alpha=ridge_alpha,
+        en_alpha=en_alpha,
+        en_l1_ratio=en_l1_ratio,
+    )
+    return train_and_eval_classical_models(
+        X_train_pca,
+        y_train,
+        X_val_pca,
+        y_val,
+        X_test_pca,
+        y_test,
+        models_dict,
+    )
+
+
 #REMOVE THIS BEFORE SUBMITTING
 if __name__ == "__main__":
     datasets = make_dataset.create_datasets()
@@ -68,3 +167,7 @@ if __name__ == "__main__":
     for modality, metrics in naive_results.items():
         print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")
 
+    classical_results = run_classical_pipeline()
+    print("Classical Model Results (PCA features):")
+    for row in classical_results:
+        print(row)
