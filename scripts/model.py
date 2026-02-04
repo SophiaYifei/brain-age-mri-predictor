@@ -1,11 +1,13 @@
 import numpy as np
+import warnings
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from sklearn.linear_model import Ridge, ElasticNet
+from sklearn.linear_model import ElasticNet
 
-from pytorch_grad_cam import GradCAM
-from pytorch_grad_cam.utils.model_targets import RegressionTarget
-from pytorch_grad_cam.utils.image import show_cam_on_image
-
+# from pytorch_grad_cam import GradCAM
+# from pytorch_grad_cam.utils.model_targets import RegressionTarget
+# from pytorch_grad_cam.utils.image import show_cam_on_image
+import importlib.util
+from pathlib import Path
 import make_dataset
 
 class NaiveModel: # the naive baseline model that predicts the average age
@@ -59,7 +61,7 @@ def show_gradcam(model, input_tensor, original_image):
 
 
 
-# --- Classical ML pipeline (PCA + Ridge/ElasticNet) ---
+# --- Classical ML pipeline (PCA + ElasticNet) ---
 
 BEST_PCA_COMPONENTS = 150
 BEST_ELASTICNET_ALPHA = 3.0
@@ -74,13 +76,11 @@ def evaluate_rmse_mae(y_true, y_pred):
 
 
 def get_classical_models(
-    ridge_alpha=1.0,
     en_alpha=BEST_ELASTICNET_ALPHA,
     en_l1_ratio=BEST_ELASTICNET_L1_RATIO,
 ):
-    """Return Ridge and ElasticNet models with configurable hyperparameters."""
+    """Return ElasticNet model with configurable hyperparameters."""
     return {
-        "Ridge": Ridge(alpha=ridge_alpha),
         "ElasticNet": ElasticNet(
             alpha=en_alpha,
             l1_ratio=en_l1_ratio,
@@ -121,45 +121,74 @@ def train_and_eval_classical_models(
 def run_classical_pipeline(
     modality="T1",
     n_components=BEST_PCA_COMPONENTS,
-    ridge_alpha=1.0,
     en_alpha=BEST_ELASTICNET_ALPHA,
     en_l1_ratio=BEST_ELASTICNET_L1_RATIO,
 ):
     """
-    Train Ridge/ElasticNet on PCA features for one modality.
+    Train ElasticNet on PCA features for one modality.
 
     Uses precomputed split CSVs under scripts/.
     """
-    from scripts import build_features
+    repo_root = Path(__file__).resolve().parents[1]
+    module_path = repo_root / "scripts" / "build_features.py"
+    spec = importlib.util.spec_from_file_location("build_features", module_path)
+    build_features = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build_features)
 
     datasets = build_features.build_datasets_from_splits()
     X_train, y_train, X_val, y_val, X_test, y_test = datasets[modality]
-    X_train_pca, X_val_pca, X_test_pca, _ = build_features.get_pca_features(
-        X_train,
-        X_val,
-        X_test,
-        n_components=n_components,
-    )
+    # Suppress numerical warnings from PCA/linear algebra without altering data.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        X_train_pca, X_val_pca, X_test_pca, _ = build_features.get_pca_features(
+            X_train,
+            X_val,
+            X_test,
+            n_components=n_components,
+        )
 
     models_dict = get_classical_models(
-        ridge_alpha=ridge_alpha,
         en_alpha=en_alpha,
         en_l1_ratio=en_l1_ratio,
     )
-    return train_and_eval_classical_models(
-        X_train_pca,
-        y_train,
-        X_val_pca,
-        y_val,
-        X_test_pca,
-        y_test,
-        models_dict,
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        return train_and_eval_classical_models(
+            X_train_pca,
+            y_train,
+            X_val_pca,
+            y_val,
+            X_test_pca,
+            y_test,
+            models_dict,
+        )
 
 
-#REMOVE THIS BEFORE SUBMITTING
+def run_classical_all_modalities(modalities=None):
+    """Run ElasticNet across modalities and return RMSE/MAE per split."""
+    if modalities is None:
+        modalities = ["T1", "T2", "PD", "MRA"]
+
+    results = {}
+    for modality in modalities:
+        classical_results = run_classical_pipeline(modality=modality)
+        row = classical_results[0]
+        results[modality] = {
+            "RMSE": row["test_RMSE"],
+            "MAE": row["test_MAE"],
+        }
+    return results
+
+
+# REMOVE THIS BEFORE SUBMITTING
 if __name__ == "__main__":
-    datasets = make_dataset.create_datasets()
+    repo_root = Path(__file__).resolve().parents[1]
+    module_path = repo_root / "scripts" / "build_features.py"
+    spec = importlib.util.spec_from_file_location("build_features", module_path)
+    build_features = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build_features)
+
+    datasets = build_features.build_datasets_from_splits()
 
     # Run the naive baseline model
     naive_results = run_all_datasets(run_naive_model, datasets)
@@ -167,7 +196,8 @@ if __name__ == "__main__":
     for modality, metrics in naive_results.items():
         print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")
 
-    classical_results = run_classical_pipeline()
+    # Run the classical model with the same simple output format
+    classical_results = run_classical_all_modalities()
     print("Classical Model Results (PCA features):")
-    for row in classical_results:
-        print(row)
+    for modality, metrics in classical_results.items():
+        print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")

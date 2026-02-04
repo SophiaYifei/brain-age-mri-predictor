@@ -7,8 +7,9 @@ from typing import Dict, Iterable, Tuple
 
 import numpy as np
 import pandas as pd
-from sklearn.decomposition import PCA
+from sklearn.decomposition import IncrementalPCA
 from sklearn.pipeline import Pipeline
+from sklearn.feature_selection import VarianceThreshold
 from sklearn.preprocessing import StandardScaler
 
 DEFAULT_MODALITIES = ("T1", "T2", "PD", "MRA")
@@ -52,6 +53,13 @@ def load_split_arrays(
         make_dataset_module.load_image_as_array(os.path.join(img_dir, fname))
         for fname in df[col_name]
     ])
+    # Normalize to [0, 1] and clean NaN/inf to stabilize PCA.
+    X = X.astype(np.float32) / 255.0
+    X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+    X = np.clip(X, 0.0, 1.0)
+    # Basic sanity check to surface problematic inputs early.
+    if not np.isfinite(X).all():
+        raise ValueError(f"Non-finite values found in modality {modality}.")
     y = df["AGE"].values
     return X, y
 
@@ -85,11 +93,11 @@ def flatten_images(X: np.ndarray) -> np.ndarray:
     return X.reshape(X.shape[0], -1)
 
 
-def build_pca_pipeline(n_components: int) -> Pipeline:
-    """Create a scaler + PCA pipeline."""
+def build_pca_pipeline(n_components: int, batch_size: int | None = None) -> Pipeline:
+    """Create a scaler + IncrementalPCA pipeline."""
     return Pipeline([
-        ("scaler", StandardScaler()),
-        ("pca", PCA(n_components=n_components, random_state=42)),
+        ("scaler", StandardScaler(with_std=False)),
+        ("pca", IncrementalPCA(n_components=n_components, batch_size=batch_size)),
     ])
 
 
@@ -101,12 +109,22 @@ def get_pca_features(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Pipeline]:
     """Fit PCA on train split and transform train/val/test."""
     # Flatten images before PCA since PCA expects 2D [n_samples, n_features].
-    X_train_flat = flatten_images(X_train)
-    X_val_flat = flatten_images(X_val)
-    X_test_flat = flatten_images(X_test)
+    X_train_flat = flatten_images(X_train).astype(np.float64)
+    X_val_flat = flatten_images(X_val).astype(np.float64)
+    X_test_flat = flatten_images(X_test).astype(np.float64)
+
+    # Remove near-zero variance features to improve numerical stability.
+    selector = VarianceThreshold(threshold=1e-8)
+    X_train_flat = selector.fit_transform(X_train_flat)
+    X_val_flat = selector.transform(X_val_flat)
+    X_test_flat = selector.transform(X_test_flat)
 
     # Fit PCA only on training data to avoid leakage.
-    pca_pipe = build_pca_pipeline(n_components)
+    # Use a single batch to avoid n_components > batch_size errors.
+    pca_pipe = build_pca_pipeline(
+        n_components,
+        batch_size=X_train_flat.shape[0],
+    )
     X_train_pca = pca_pipe.fit_transform(X_train_flat)
     X_val_pca = pca_pipe.transform(X_val_flat)
     X_test_pca = pca_pipe.transform(X_test_flat)
