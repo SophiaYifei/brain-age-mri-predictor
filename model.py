@@ -1,9 +1,5 @@
 import warnings
-warnings.filterwarnings(
-    "ignore",
-    category=FutureWarning,
-    module=r"google\.api_core\._python_version_support"
-)
+warnings.filterwarnings("ignore")  # suppress ALL warnings
 
 import os
 import numpy as np
@@ -27,7 +23,7 @@ from pytorch_grad_cam.utils.image import show_cam_on_image
 
 
 # ----------------------------
-# Baseline model (kept from your original file)
+# Baseline Model
 # ----------------------------
 class NaiveModel:  # the naive baseline model that predicts the average age
     def __init__(self, avg_age=50):
@@ -59,7 +55,7 @@ def run_all_datasets(run_model_func, datasets):
 
 
 # ----------------------------
-# Your Colab notebook code, preserved and runnable in model.py
+# GCS Download
 # ----------------------------
 def download_gcs_folder(bucket_name, gcs_folder_prefix, local_dir):
     """
@@ -72,24 +68,25 @@ def download_gcs_folder(bucket_name, gcs_folder_prefix, local_dir):
         gcs_folder_prefix += "/"
 
     blobs = bucket.list_blobs(prefix=gcs_folder_prefix)
-
     print(f"Searching for files in: gs://{bucket_name}/{gcs_folder_prefix}")
+
+    os.makedirs(local_dir, exist_ok=True)
 
     for blob in blobs:
         if blob.name == gcs_folder_prefix:
             continue
 
         local_file_name = os.path.basename(blob.name)
-
         if local_file_name:
             local_path = os.path.join(local_dir, local_file_name)
-
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
-
             blob.download_to_filename(local_path)
             print(f"Downloaded: {local_file_name}")
 
 
+# ----------------------------
+# Dataset + Transforms
+# ----------------------------
 class AddGaussianNoise(object):
     def __init__(self, mean=0.0, std=1.0):
         self.std = std
@@ -122,67 +119,7 @@ class MRIImageDataset(Dataset):
         return image, torch.tensor(age, dtype=torch.float32)
 
 
-# ----------------------------
-# Grad-CAM target for regression (fixes RegressionTarget import issues)
-# ----------------------------
-class RegressionTarget:
-    def __call__(self, model_output):
-        if model_output.ndim > 1:
-            return model_output[:, 0]
-        return model_output
-
-
-def show_gradcam(model, input_tensor, original_image):
-    target_layers = [model.layer4[-1]]
-    cam = GradCAM(model=model, target_layers=target_layers)
-    targets = [RegressionTarget()]
-    grayscale_cam = cam(input_tensor=input_tensor, targets=targets)
-    visualization = show_cam_on_image(original_image, grayscale_cam[0, :], use_rgb=True)
-    return visualization
-
-
-# ----------------------------
-# Main: downloads data, builds paths, splits, trains for epochs, prints losses + metrics
-# ----------------------------
-if __name__ == "__main__":
-    # Remove Colab sample_data equivalent if it exists locally
-    if os.path.exists("./sample_data"):
-        try:
-            import shutil
-
-            shutil.rmtree("./sample_data")
-        except Exception:
-            pass
-
-    # 1) Download images from GCS
-    download_gcs_folder(
-        bucket_name="brain-age-mri-bucket",
-        gcs_folder_prefix="imgs_folder/",
-        local_dir="./data/raw",
-    )
-
-    # 2) Load CSV + filter columns
-    df = pd.read_csv("./IXI_with_filenames.csv")
-    needed_df = df[["IXI_ID", "file_name", "AGE"]].copy()
-    needed_df.dropna(subset=["file_name", "AGE"], inplace=True)
-    print(needed_df.shape)
-
-    # 3) Create image_path column (same as notebook)
-    needed_df = needed_df.copy()
-    needed_df["image_path"] = needed_df["file_name"].apply(lambda x: os.path.join("./data/raw", x))
-
-    # 4) Split data (same as notebook)
-    X = needed_df["image_path"]
-    y = needed_df["AGE"]
-
-    X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_state=42)
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
-
-    print(f"Training set size: {len(X_train)} samples")
-    print(f"Validation set size: {len(X_val)} samples")
-    print(f"Test set size: {len(X_test)} samples")
-
-    # 5) Define transforms (same intent as notebook)
+def build_transforms():
     train_transform = transforms.Compose(
         [
             transforms.Resize((224, 224)),
@@ -212,23 +149,13 @@ if __name__ == "__main__":
         ]
     )
 
-    # 6) Create datasets + loaders (same as notebook)
-    batch_size = 32
-    num_workers = 2
+    return train_transform, val_transform, test_transform
 
-    train_dataset = MRIImageDataset(X_train, y_train, transform=train_transform)
-    val_dataset = MRIImageDataset(X_val, y_val, transform=val_transform)
-    test_dataset = MRIImageDataset(X_test, y_test, transform=test_transform)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-
-    print(f"Training DataLoader created with {len(train_dataset)} samples and batch size {batch_size}.")
-    print(f"Validation DataLoader created with {len(val_dataset)} samples and batch size {batch_size}.")
-    print(f"Test DataLoader created with {len(test_dataset)} samples and batch size {batch_size}.")
-
-    # 7) Load + modify ResNet50 (same as notebook)
+# ----------------------------
+# Model Build
+# ----------------------------
+def build_resnet50_regressor(lr=0.001):
     model = resnet50(pretrained=True)
 
     for param in model.parameters():
@@ -240,25 +167,62 @@ if __name__ == "__main__":
     for param in model.fc.parameters():
         param.requires_grad = True
 
-    print("Modified ResNet50 model architecture:")
-    print(model)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    # 8) Loss + optimizer (same as notebook)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+    return model, criterion, optimizer
+
+
+# ----------------------------
+# Pipeline Functions
+# ----------------------------
+def load_dataframe(csv_path="./IXI_with_filenames.csv"):
+    df = pd.read_csv(csv_path)
+    needed_df = df[["IXI_ID", "file_name", "AGE"]].copy()
+    needed_df.dropna(subset=["file_name", "AGE"], inplace=True)
+    return needed_df
+
+
+def add_image_paths(needed_df, images_dir="./data/raw"):
+    needed_df = needed_df.copy()
+    needed_df["image_path"] = needed_df["file_name"].apply(lambda x: os.path.join(images_dir, x))
+    return needed_df
+
+
+def split_data(needed_df, random_state=42):
+    X = needed_df["image_path"]
+    y = needed_df["AGE"]
+
+    X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_state=random_state)
+    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=random_state)
+
+    return X_train, X_val, X_test, y_train, y_val, y_test
+
+
+def make_loaders(X_train, y_train, X_val, y_val, X_test, y_test, batch_size=32, num_workers=2):
+    train_transform, val_transform, test_transform = build_transforms()
+
+    train_dataset = MRIImageDataset(X_train, y_train, transform=train_transform)
+    val_dataset = MRIImageDataset(X_val, y_val, transform=val_transform)
+    test_dataset = MRIImageDataset(X_test, y_test, transform=test_transform)
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+    return train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset
+
+
+def train_model(model, train_loader, val_loader, train_dataset, val_dataset, criterion, optimizer, num_epochs=20, device=None):
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model.to(device)
 
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-    print("Loss function (MSELoss) and Optimizer (Adam) defined.")
-
-    # 9) Train loop with epoch prints (same as notebook)
-    num_epochs = 20
-
     train_losses = []
     val_losses = []
+    all_val_preds = []
+    all_val_ages = []
 
     for epoch in range(num_epochs):
         model.train()
@@ -301,11 +265,104 @@ if __name__ == "__main__":
         print(f"Epoch [{epoch+1}/{num_epochs}], Train Loss: {epoch_train_loss:.4f}, Val Loss: {epoch_val_loss:.4f}")
 
     print("Training complete.")
+    return model, train_losses, val_losses, all_val_ages, all_val_preds
 
-    # 10) Evaluate (same as notebook intent)
-    mae = mean_absolute_error(all_val_ages, all_val_preds)
-    mse = mean_squared_error(all_val_ages, all_val_preds)
+
+def evaluate_regression(all_ages, all_preds):
+    mae = mean_absolute_error(all_ages, all_preds)
+    mse = mean_squared_error(all_ages, all_preds)
     rmse = float(np.sqrt(mse))
+    return float(mae), rmse
 
+
+def run_training_pipeline(
+    *,
+    bucket_name="brain-age-mri-bucket",
+    gcs_folder_prefix="imgs_folder/",
+    local_dir="./data/raw",
+    csv_path="./IXI_with_filenames.csv",
+    num_epochs=20,
+    batch_size=32,
+    num_workers=2,
+    lr=0.001,
+):
+    download_gcs_folder(bucket_name=bucket_name, gcs_folder_prefix=gcs_folder_prefix, local_dir=local_dir)
+
+    needed_df = load_dataframe(csv_path=csv_path)
+    print(needed_df.shape)
+
+    needed_df = add_image_paths(needed_df, images_dir=local_dir)
+
+    X_train, X_val, X_test, y_train, y_val, y_test = split_data(needed_df)
+
+    print(f"Training set size: {len(X_train)} samples")
+    print(f"Validation set size: {len(X_val)} samples")
+    print(f"Test set size: {len(X_test)} samples")
+
+    train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset = make_loaders(
+        X_train, y_train, X_val, y_val, X_test, y_test, batch_size=batch_size, num_workers=num_workers
+    )
+
+    print(f"Training DataLoader created with {len(train_dataset)} samples and batch size {batch_size}.")
+    print(f"Validation DataLoader created with {len(val_dataset)} samples and batch size {batch_size}.")
+    print(f"Test DataLoader created with {len(test_dataset)} samples and batch size {batch_size}.")
+
+    model, criterion, optimizer = build_resnet50_regressor(lr=lr)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    print("Loss function (MSELoss) and Optimizer (Adam) defined.")
+    print("Modified ResNet50 model architecture:")
+    print(model)
+
+    model, train_losses, val_losses, all_val_ages, all_val_preds = train_model(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        train_dataset=train_dataset,
+        val_dataset=val_dataset,
+        criterion=criterion,
+        optimizer=optimizer,
+        num_epochs=num_epochs,
+        device=device,
+    )
+
+    mae, rmse = evaluate_regression(all_val_ages, all_val_preds)
     print(f"Mean Absolute Error (MAE): {mae:.4f}")
     print(f"Root Mean Squared Error (RMSE): {rmse:.4f}")
+
+    return {
+        "model": model,
+        "train_losses": train_losses,
+        "val_losses": val_losses,
+        "val_ages": all_val_ages,
+        "val_preds": all_val_preds,
+        "MAE": mae,
+        "RMSE": rmse,
+    }
+
+
+# ----------------------------
+# Grad-CAM
+# ----------------------------
+class RegressionTarget:
+    def __call__(self, model_output):
+        if model_output.ndim > 1:
+            return model_output[:, 0]
+        return model_output
+
+
+def show_gradcam(model, input_tensor, original_image):
+    target_layers = [model.layer4[-1]]
+    cam = GradCAM(model=model, target_layers=target_layers)
+    targets = [RegressionTarget()]
+    grayscale_cam = cam(input_tensor=input_tensor, targets=targets)
+    visualization = show_cam_on_image(original_image, grayscale_cam[0, :], use_rgb=True)
+    return visualization
+
+
+# ----------------------------
+# Main is now only for testing
+# ----------------------------
+if __name__ == "__main__":
+    run_training_pipeline()
