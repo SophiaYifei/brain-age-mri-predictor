@@ -48,7 +48,7 @@ def load_image_as_array(file_path, target_size=(224, 224)):
         img = img.resize(target_size, Image.Resampling.LANCZOS)
         return np.array(img)
 
-def create_datasets():
+def create_datasets(type='files'):
     df = pd.read_csv('../IXI_with_filenames.csv')
     modalities = ['T1', 'T2', 'PD', 'MRA']
 
@@ -78,13 +78,29 @@ def create_datasets():
     for mod in modalities:
         col_name = f'{mod}_file_name'
 
-        X_train = np.array([load_image_as_array(os.path.join(f'../data/raw/IXI_{mod}_png', fname)) for fname in train_df[col_name]])
-        y_train = train_df['AGE'].values
-        X_val = np.array([load_image_as_array(os.path.join(f'../data/raw/IXI_{mod}_png', fname)) for fname in val_df[col_name]])
-        y_val = val_df['AGE'].values
-        X_test = np.array([load_image_as_array(os.path.join(f'../data/raw/IXI_{mod}_png', fname)) for fname in test_df[col_name]])
-        y_test = test_df['AGE'].values
+        dirname = 'raw'
+        #if mod == 'T1':
+        #    dirname = 'processed'
+        
+        if type == 'files':
+            # Just return filenames
+            X_train = np.array([os.path.join(f'../data/{dirname}/IXI_{mod}_png', fname) for fname in train_df[col_name]])
+            y_train = train_df['AGE'].values
+            X_val = np.array([os.path.join(f'../data/{dirname}/IXI_{mod}_png', fname) for fname in val_df[col_name]])
+            y_val = val_df['AGE'].values
+            X_test = np.array([os.path.join(f'../data/{dirname}/IXI_{mod}_png', fname) for fname in test_df[col_name]])
+            y_test = test_df['AGE'].values
 
-        datasets[mod] = (X_train, y_train, X_val, y_val, X_test, y_test)
+            datasets[mod] = (X_train, y_train, X_val, y_val, X_test, y_test)
+            
+        else:
+            X_train = np.array([load_image_as_array(os.path.join(f'../data/{dirname}/IXI_{mod}_png', fname)) for fname in train_df[col_name]])
+            y_train = train_df['AGE'].values
+            X_val = np.array([load_image_as_array(os.path.join(f'../data/{dirname}/IXI_{mod}_png', fname)) for fname in val_df[col_name]])
+            y_val = val_df['AGE'].values
+            X_test = np.array([load_image_as_array(os.path.join(f'../data/{dirname}/IXI_{mod}_png', fname)) for fname in test_df[col_name]])
+            y_test = test_df['AGE'].values
+
+            datasets[mod] = (X_train, y_train, X_val, y_val, X_test, y_test)
     
     return datasets
