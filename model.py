@@ -1,5 +1,14 @@
+import numpy as np
 import warnings
-warnings.filterwarnings("ignore")  # suppress ALL warnings
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.linear_model import ElasticNet
+import pickle
+
+import matplotlib.pyplot as plt
+import importlib.util
+from pathlib import Path
+import make_dataset
+import build_features
 
 import os
 import numpy as np
@@ -18,75 +27,177 @@ from google.cloud import storage
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
-from pytorch_grad_cam import GradCAM
-from pytorch_grad_cam.utils.image import show_cam_on_image
+# try:
+#     t = torch.from_numpy(np.array([1, 2, 3]))
+#     print("Success: NumPy and PyTorch are talking!")
+# except Exception as e:
+#     print(f"Still failing: {e}")
 
-
-# ----------------------------
-# Baseline Model
-# ----------------------------
-class NaiveModel:  # the naive baseline model that predicts the average age
+#======================= Naive Model ===========================
+class NaiveModel: # the naive baseline model that predicts the average age
     def __init__(self, avg_age=50):
         self.avg_age = avg_age
-
+    
     def fit(self, X_train, y_train):
-        self.avg_age = float(np.mean(y_train))
+        self.avg_age = y_train.mean()
 
     def predict(self, X_test):
-        n_samples = len(X_test)
+        n_samples = X_test.shape[0]
         return [self.avg_age] * n_samples
-
 
 def run_naive_model(X_train, y_train, X_test, y_test):
     naive_model = NaiveModel()
     naive_model.fit(X_train, y_train)
     preds = naive_model.predict(X_test)
-    rmse = float(np.sqrt(mean_squared_error(y_test, preds)))
-    mae = float(mean_absolute_error(y_test, preds))
-    return rmse, mae
+    rmse = np.sqrt(mean_squared_error(y_test, preds))
+    mae = mean_absolute_error(y_test, preds)
+    return naive_model, rmse, mae
 
 
 def run_all_datasets(run_model_func, datasets):
     results = {}
-    for modalities, (X_train, y_train, _, _, X_test, y_test) in datasets.items():
-        rmse, mae = run_model_func(X_train, y_train, X_test, y_test)
-        results[modalities] = {"RMSE": rmse, "MAE": mae}
+    for modality, (X_train, y_train, _, _, X_test, y_test) in datasets.items():
+        model, rmse, mae = run_model_func(X_train, y_train, X_test, y_test)
+        with open(f"../models/naive_model_{modality}.pkl", "wb") as f:
+            pickle.dump(model, f)
+        results[modality] = {'RMSE': rmse, 'MAE': mae}
     return results
 
 
-# ----------------------------
-# GCS Download
-# ----------------------------
-def download_gcs_folder(bucket_name, gcs_folder_prefix, local_dir):
+
+
+
+
+
+
+# ====================== Classical ML pipeline (PCA + ElasticNet) ====================
+
+BEST_PCA_COMPONENTS = 150
+BEST_ELASTICNET_ALPHA = 3.0
+BEST_ELASTICNET_L1_RATIO = 0.7
+
+
+def evaluate_rmse_mae(y_true, y_pred):
+    """Return RMSE and MAE for regression outputs."""
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    mae = mean_absolute_error(y_true, y_pred)
+    return {"RMSE": rmse, "MAE": mae}
+
+
+def get_classical_models(
+    en_alpha=BEST_ELASTICNET_ALPHA,
+    en_l1_ratio=BEST_ELASTICNET_L1_RATIO,
+):
+    """Return ElasticNet model with configurable hyperparameters."""
+    return {
+        "ElasticNet": ElasticNet(
+            alpha=en_alpha,
+            l1_ratio=en_l1_ratio,
+            random_state=42,
+        ),
+    }
+
+
+def train_and_eval_classical_models(
+    X_train,
+    y_train,
+    X_val,
+    y_val,
+    X_test,
+    y_test,
+    models_dict,
+):
+    """Train models and return metrics on val/test splits (RMSE/MAE)."""
+    results = []
+    for name, model in models_dict.items():
+        model.fit(X_train, y_train)
+        val_pred = model.predict(X_val)
+        test_pred = model.predict(X_test)
+
+        val_metrics = evaluate_rmse_mae(y_val, val_pred)
+        test_metrics = evaluate_rmse_mae(y_test, test_pred)
+
+        results.append({
+            "model_name": name,
+            "model": model,
+            "val_RMSE": val_metrics["RMSE"],
+            "val_MAE": val_metrics["MAE"],
+            "test_RMSE": test_metrics["RMSE"],
+            "test_MAE": test_metrics["MAE"],
+        })
+    return results
+
+
+def run_classical_pipeline(
+    modality="T1",
+    n_components=BEST_PCA_COMPONENTS,
+    en_alpha=BEST_ELASTICNET_ALPHA,
+    en_l1_ratio=BEST_ELASTICNET_L1_RATIO,
+):
     """
-    Downloads all blobs from a bucket with a specific prefix.
+    Train ElasticNet on PCA features for one modality.
+
+    Uses precomputed split CSVs under scripts/.
     """
-    storage_client = storage.Client.create_anonymous_client()
-    bucket = storage_client.bucket(bucket_name)
+    #repo_root = Path(__file__).resolve().parents[1]
+    #module_path = repo_root / "scripts" / "build_features.py"
+    #spec = importlib.util.spec_from_file_location("build_features", module_path)
+    #build_features = importlib.util.module_from_spec(spec)
+    #spec.loader.exec_module(build_features)
 
-    if not gcs_folder_prefix.endswith("/"):
-        gcs_folder_prefix += "/"
+    datasets = build_features.build_datasets_from_splits()
+    X_train, y_train, X_val, y_val, X_test, y_test = datasets[modality]
+    # Suppress numerical warnings from PCA/linear algebra without altering data.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        X_train_pca, X_val_pca, X_test_pca, _ = build_features.get_pca_features(
+            X_train,
+            X_val,
+            X_test,
+            n_components=n_components,
+        )
 
-    blobs = bucket.list_blobs(prefix=gcs_folder_prefix)
-    print(f"Searching for files in: gs://{bucket_name}/{gcs_folder_prefix}")
+    models_dict = get_classical_models(
+        en_alpha=en_alpha,
+        en_l1_ratio=en_l1_ratio,
+    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        return train_and_eval_classical_models(
+            X_train_pca,
+            y_train,
+            X_val_pca,
+            y_val,
+            X_test_pca,
+            y_test,
+            models_dict,
+        )
 
-    os.makedirs(local_dir, exist_ok=True)
 
-    for blob in blobs:
-        if blob.name == gcs_folder_prefix:
-            continue
+def run_classical_all_modalities(modalities=None):
+    """Run ElasticNet across modalities and return RMSE/MAE per split."""
+    if modalities is None:
+        modalities = ["T1", "T2", "PD", "MRA"]
 
-        local_file_name = os.path.basename(blob.name)
-        if local_file_name:
-            local_path = os.path.join(local_dir, local_file_name)
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            blob.download_to_filename(local_path)
-            print(f"Downloaded: {local_file_name}")
+    results = {}
+    for modality in modalities:
+        classical_results = run_classical_pipeline(modality=modality)
+        row = classical_results[0]
+        with open(f"../models/classical_model_{modality}.pkl", "wb") as f:
+            pickle.dump(row['model'], f)
+        results[modality] = {
+            "RMSE": row["test_RMSE"],
+            "MAE": row["test_MAE"],
+        }
+    return results
 
 
-# ----------------------------
-# Dataset + Transforms
-# ----------------------------
+
+
+
+
+# ======================== Deep Learning Model (ResNet50) ========================
+
 class AddGaussianNoise(object):
     def __init__(self, mean=0.0, std=1.0):
         self.std = std
@@ -117,7 +228,7 @@ class MRIImageDataset(Dataset):
             image = self.transform(image)
 
         return image, torch.tensor(age, dtype=torch.float32)
-
+    
 
 def build_transforms():
     train_transform = transforms.Compose(
@@ -125,10 +236,10 @@ def build_transforms():
             transforms.Resize((224, 224)),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(10),
+            transforms.ToTensor(),
             transforms.GaussianBlur(kernel_size=(5, 9)),
             transforms.ColorJitter(brightness=0.2, contrast=0.2),
-            transforms.ToTensor(),
-            AddGaussianNoise(0.0, 0.1),
+            AddGaussianNoise(0.0, 0.03),
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
         ]
     )
@@ -151,15 +262,11 @@ def build_transforms():
 
     return train_transform, val_transform, test_transform
 
-
-# ----------------------------
-# Model Build
-# ----------------------------
 def build_resnet50_regressor(lr=0.001):
     model = resnet50(pretrained=True)
 
-    for param in model.parameters():
-        param.requires_grad = False
+    #for param in model.parameters():
+    #    param.requires_grad = False
 
     num_ftrs = model.fc.in_features
     model.fc = nn.Linear(num_ftrs, 1)
@@ -171,32 +278,6 @@ def build_resnet50_regressor(lr=0.001):
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     return model, criterion, optimizer
-
-
-# ----------------------------
-# Pipeline Functions
-# ----------------------------
-def load_dataframe(csv_path="./IXI_with_filenames.csv"):
-    df = pd.read_csv(csv_path)
-    needed_df = df[["IXI_ID", "file_name", "AGE"]].copy()
-    needed_df.dropna(subset=["file_name", "AGE"], inplace=True)
-    return needed_df
-
-
-def add_image_paths(needed_df, images_dir="./data/raw"):
-    needed_df = needed_df.copy()
-    needed_df["image_path"] = needed_df["file_name"].apply(lambda x: os.path.join(images_dir, x))
-    return needed_df
-
-
-def split_data(needed_df, random_state=42):
-    X = needed_df["image_path"]
-    y = needed_df["AGE"]
-
-    X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_state=random_state)
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=random_state)
-
-    return X_train, X_val, X_test, y_train, y_val, y_test
 
 
 def make_loaders(X_train, y_train, X_val, y_val, X_test, y_test, batch_size=32, num_workers=2):
@@ -277,30 +358,33 @@ def evaluate_regression(all_ages, all_preds):
 
 def run_training_pipeline(
     *,
-    bucket_name="brain-age-mri-bucket",
-    gcs_folder_prefix="imgs_folder/",
-    local_dir="./data/raw",
-    csv_path="./IXI_with_filenames.csv",
+    #bucket_name="brain-age-mri-bucket",
+    #gcs_folder_prefix="imgs_folder/",
+    #local_dir="./data/raw",
+    #csv_path="./IXI_with_filenames.csv",
+    dataset,
     num_epochs=20,
     batch_size=32,
     num_workers=2,
     lr=0.001,
 ):
-    download_gcs_folder(bucket_name=bucket_name, gcs_folder_prefix=gcs_folder_prefix, local_dir=local_dir)
+    #make_dataset.download_gcs_folder(bucket_name=bucket_name, gcs_folder_prefix=gcs_folder_prefix, local_dir=local_dir)
 
-    needed_df = load_dataframe(csv_path=csv_path)
-    print(needed_df.shape)
+    #needed_df = load_dataframe(csv_path=csv_path)
+    #print(needed_df.shape)
 
-    needed_df = add_image_paths(needed_df, images_dir=local_dir)
+    #needed_df = add_image_paths(needed_df, images_dir=local_dir)
 
-    X_train, X_val, X_test, y_train, y_val, y_test = split_data(needed_df)
+    #X_train, X_val, X_test, y_train, y_val, y_test = split_data(needed_df)
+
+    X_train, y_train, X_val, y_val, X_test, y_test = dataset
 
     print(f"Training set size: {len(X_train)} samples")
     print(f"Validation set size: {len(X_val)} samples")
     print(f"Test set size: {len(X_test)} samples")
 
     train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset = make_loaders(
-        X_train, y_train, X_val, y_val, X_test, y_test, batch_size=batch_size, num_workers=num_workers
+        X_train, y_train, X_val, y_val, X_test, y_test, batch_size=batch_size, num_workers=0
     )
 
     print(f"Training DataLoader created with {len(train_dataset)} samples and batch size {batch_size}.")
@@ -341,28 +425,85 @@ def run_training_pipeline(
         "RMSE": rmse,
     }
 
+def run_deep_learning_all_modalities(datasets, num_epochs=20, batch_size=32, num_workers=2, lr=0.001):
+    results = {}
+    for modality, dataset in datasets.items():
+        print(f"Running Deep Learning pipeline for modality: {modality}")
+        dl_results = run_training_pipeline(
+            dataset=dataset,
+            num_epochs=num_epochs,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            lr=lr,
+        )
 
-# ----------------------------
-# Grad-CAM
-# ----------------------------
-class RegressionTarget:
-    def __call__(self, model_output):
-        if model_output.ndim > 1:
-            return model_output[:, 0]
-        return model_output
+        torch.save(dl_results["model"].state_dict(), f"../models/dl_model_{modality}.pth")
+        with open(f"../models/dl_model_{modality}_full.pkl", "wb") as f:
+            pickle.dump(dl_results["model"], f)
+
+        results[modality] = {
+            "MAE": dl_results["MAE"],
+            "RMSE": dl_results["RMSE"],
+        }
+    return results
 
 
-def show_gradcam(model, input_tensor, original_image):
-    target_layers = [model.layer4[-1]]
-    cam = GradCAM(model=model, target_layers=target_layers)
-    targets = [RegressionTarget()]
-    grayscale_cam = cam(input_tensor=input_tensor, targets=targets)
-    visualization = show_cam_on_image(original_image, grayscale_cam[0, :], use_rgb=True)
-    return visualization
+def predict_age_from_file(
+    image_path,
+    model_weights_path,
+    device=None):
+
+    """
+    Run inference on a single MRI image file.
+    Uses the existing ResNet50 architecture and preprocessing.
+    This is inference-only (no training).
+    """
+
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Build model architecture
+    model, _, _ = build_resnet50_regressor()
+    model.load_state_dict(torch.load(model_weights_path, map_location=device))
+    model.to(device)
+    model.eval()
+
+    # Use test-time transforms only (no augmentation)
+    _, _, test_transform = build_transforms()
+
+    # Load and preprocess image
+    image = Image.open(image_path).convert("RGB")
+    image = test_transform(image).unsqueeze(0).to(device)
+
+    # Run inference
+    with torch.no_grad():
+        pred = model(image).item()
+
+    return float(pred)
 
 
-# ----------------------------
-# Main is now only for testing
-# ----------------------------
+
+# REMOVE THIS BEFORE SUBMITTING
 if __name__ == "__main__":
-    run_training_pipeline()
+
+    datasets = make_dataset.create_datasets()
+    #classical_datasets = build_features.build_datasets_from_splits()
+    dl_datasets = make_dataset.create_datasets(type='files')
+
+    # Run the naive baseline model
+    naive_results = run_all_datasets(run_naive_model, datasets)
+    print("Naive Model Results:")
+    for modality, metrics in naive_results.items():
+        print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")
+
+    # Run the classical model with the same simple output format
+    classical_results = run_classical_all_modalities()
+    print("Classical Model Results (PCA features):")
+    for modality, metrics in classical_results.items():
+        print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")
+
+    # Run the deep learning model with the same simple output format
+    deep_learning_results = run_deep_learning_all_modalities(dl_datasets)
+    print("Deep Learning Model Results (ResNet50):")
+    for modality, metrics in deep_learning_results.items():
+        print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")
