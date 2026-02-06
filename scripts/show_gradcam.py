@@ -61,7 +61,7 @@ def run_gradcam_comparison(patient_image_paths, transform, true_age):
     """
     fig, axes = plt.subplots(1, 4, figsize=(20, 5))
     
-    modalities = ['T1'] #, 'T2', 'PD', 'MRA']
+    modalities = ['T1', 'T2', 'PD', 'MRA']
     
     for i, modality in enumerate(modalities):
         # 1. Reconstruct Architecture
