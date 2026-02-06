@@ -239,7 +239,7 @@ def build_transforms():
             transforms.ToTensor(),
             transforms.GaussianBlur(kernel_size=(5, 9)),
             transforms.ColorJitter(brightness=0.2, contrast=0.2),
-            AddGaussianNoise(0.0, 0.1),
+            AddGaussianNoise(0.0, 0.03),
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
         ]
     )

@@ -1,4 +1,5 @@
 import model
+import fusion_model
 
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
@@ -69,7 +70,7 @@ def run_gradcam_comparison(patient_image_paths, transform, true_age):
         model.fc = nn.Linear(num_ftrs, 1) # Matches your training setup
         
         # 2. Load Weights
-        model_path = f'../models/dl_model_{modality}_skull.pth'
+        model_path = f'../models/dl_model_{modality}.pth'
         model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
         model.eval()
 
@@ -106,9 +107,99 @@ def run_gradcam_comparison(patient_image_paths, transform, true_age):
     plt.tight_layout()
     plt.show()
 
+def run_fusion_gradcam(model, patient_images, transform, true_age, device):
+    """
+    model: The trained LateFusionBrainAgeModel
+    patient_images: List of PIL images [T1, T2, PD, MRA]
+    """
+    model.eval()
+    modalities = ['T1', 'T2', 'PD', 'MRA']
+    
+    # 1. Preprocess all images for the forward pass
+    tensors = [transform(img).unsqueeze(0).to(device) for img in patient_images]
+    t1_t, t2_t, pd_t, mra_t = tensors
+
+    # 2. Get the Fusion Prediction
+    with torch.no_grad():
+        pred_age = model(t1_t, t2_t, pd_t, mra_t).item()
+
+    fig, axes = plt.subplots(1, 4, figsize=(24, 6))
+
+    # 3. Define target branches within the Fusion Model
+    # These match the attributes in your LateFusionBrainAgeModel class
+    branches = [model.branch_t1, model.branch_t2, model.branch_pd, model.branch_mra]
+
+    for i, modality in enumerate(modalities):
+        # The target layer is the last convolutional layer of the specific branch
+        target_layers = [branches[i].layer4[-1]]
+        
+        # Prepare background image for overlay (0 to 1 float)
+        rgb_img = np.array(patient_images[i].resize((224, 224))).astype(np.float32) / 255.0
+
+
+        class MultiInputWrapper(torch.nn.Module):
+            def __init__(self, model):
+                super().__init__()
+                self.model = model
+            def forward(self, x):
+                # x is the concatenated tensor [Batch, 12, H, W]
+                # We split it back into 4 images [Batch, 3, H, W]
+                t1, t2, pd, mra = torch.chunk(x, 4, dim=1)
+                return self.model(t1, t2, pd, mra)
+            
+        # 4. Generate CAM for this specific branch
+        # We pass the full set of tensors, but Grad-CAM tracks gradients through branches[i]
+        from pytorch_grad_cam import GradCAM
+        cam = GradCAM(model=MultiInputWrapper(model), target_layers=target_layers)
+        
+        # Combine the 4 tensors into one [1, 12, 224, 224] so .to() works
+        combined_tensor = torch.cat([t1_t, t2_t, pd_t, mra_t], dim=1)
+
+        # Now call cam with the combined tensor
+        grayscale_cam = cam(input_tensor=combined_tensor)
+        grayscale_cam = grayscale_cam[0, :]
+
+        # 5. Overlay and Plot
+        from pytorch_grad_cam.utils.image import show_cam_on_image
+        viz = show_cam_on_image(rgb_img, grayscale_cam, use_rgb=True)
+        
+        axes[i].imshow(viz)
+        axes[i].set_title(f"Fusion Modality: {modality}\nPred Age: {pred_age:.1f}")
+        axes[i].axis('off')
+
+    plt.suptitle(f"Multi-Modal Grad-CAM (True Age: {true_age})", fontsize=16)
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
-    run_gradcam_comparison({
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    f_model = fusion_model.LateFusionBrainAgeModel().to(device)
+    f_model.load_state_dict(torch.load('../models/final_late_fusion_model.pth', map_location=device))
+
+    subject_paths = {
+        'T1': '../data/raw/IXI_T1_png/IXI019-Guys-0702-T1.png',
+        'T2': '../data/raw/IXI_T2_png/IXI019-Guys-0702-T2.png',
+        'PD': '../data/raw/IXI_PD_png/IXI019-Guys-0702-PD.png',
+        'MRA': '../data/raw/IXI_MRA_png/IXI019-Guys-0702-MRA.png'
+    }
+
+    patient_pil_images = [
+        Image.open(subject_paths['T1']).convert('RGB'),
+        Image.open(subject_paths['T2']).convert('RGB'),
+        Image.open(subject_paths['PD']).convert('RGB'),
+        Image.open(subject_paths['MRA']).convert('RGB')
+    ]
+
+    run_fusion_gradcam(
+        model=f_model, 
+        patient_images=patient_pil_images, 
+        transform=model.build_transforms()[1], 
+        true_age=58.65845311430527, 
+        device=device
+    )
+
+
+    """ run_gradcam_comparison({
         'T1': '../data/raw/IXI_T1_png/IXI002-Guys-0828-T1.png',
         'T2': '../data/raw/IXI_T2_png/IXI002-Guys-0828-T2.png',
         'PD': '../data/raw/IXI_PD_png/IXI002-Guys-0828-PD.png',
@@ -127,4 +218,4 @@ if __name__ == "__main__":
         'T2': '../data/raw/IXI_T2_png/IXI019-Guys-0702-T2.png',
         'PD': '../data/raw/IXI_PD_png/IXI019-Guys-0702-PD.png',
         'MRA': '../data/raw/IXI_MRA_png/IXI019-Guys-0702-MRA.png'}, 
-        model.build_transforms()[2], true_age=58.65845311430527)
+        model.build_transforms()[2], true_age=58.65845311430527) """
