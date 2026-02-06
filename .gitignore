@@ -207,6 +207,10 @@ marimo/_lsp/
 __marimo__/
 # Project Data (Keep local)
 data/raw/
+data/processed/
+
+# Models
+models/
 
 # Python Cache
 __pycache__/
