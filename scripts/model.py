@@ -7,8 +7,9 @@ import pickle
 import matplotlib.pyplot as plt
 import importlib.util
 from pathlib import Path
-import make_dataset
-import build_features
+
+from scripts import make_dataset
+from scripts import build_features
 
 import os
 import numpy as np
@@ -448,10 +449,38 @@ def run_deep_learning_all_modalities(datasets, num_epochs=20, batch_size=32, num
     return results
 
 
+def predict_age_from_file(
+    image_path,
+    model_weights_path,
+    device=None):
 
+    """
+    Run inference on a single MRI image file.
+    Uses the existing ResNet50 architecture and preprocessing.
+    This is inference-only (no training).
+    """
 
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # Build model architecture
+    model, _, _ = build_resnet50_regressor()
+    model.load_state_dict(torch.load(model_weights_path, map_location=device))
+    model.to(device)
+    model.eval()
 
+    # Use test-time transforms only (no augmentation)
+    _, _, test_transform = build_transforms()
+
+    # Load and preprocess image
+    image = Image.open(image_path).convert("RGB")
+    image = test_transform(image).unsqueeze(0).to(device)
+
+    # Run inference
+    with torch.no_grad():
+        pred = model(image).item()
+
+    return float(pred)
 
 
 # REMOVE THIS BEFORE SUBMITTING
