@@ -71,9 +71,9 @@ def create_datasets(type='files'):
     print(f"Train size: {len(train_df)}, Val size: {len(val_df)}, Test size: {len(test_df)}")
 
     # for future use, save the splits
-    train_df.to_csv('train_split.csv', index=False)
-    val_df.to_csv('val_split.csv', index=False)
-    test_df.to_csv('test_split.csv', index=False)
+    train_df.to_csv('../data/labels/train_split.csv', index=False)
+    val_df.to_csv('../data/labels/val_split.csv', index=False)
+    test_df.to_csv('../data/labels/test_split.csv', index=False)
 
     for mod in modalities:
         col_name = f'{mod}_file_name'

@@ -1,4 +1,6 @@
 import scripts.make_dataset
+import scripts.model
+import scripts.fusion_model
 
 def download_data():
     #Load T1 images
@@ -34,7 +36,50 @@ def download_data():
     print("MRA images downloaded.")
 
 
+def train_naive():
+    datasets = scripts.make_dataset.create_datasets()
+
+    # Run the naive baseline model
+    naive_results = scripts.model.run_all_datasets(scripts.model.run_naive_model, datasets)
+    print("Naive Model Results:")
+    for modality, metrics in naive_results.items():
+        print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")
+
+def train_classical():
+    # Run the classical model with the same simple output format
+    classical_results = scripts.model.run_classical_all_modalities()
+    print("Classical Model Results (PCA features):")
+    for modality, metrics in classical_results.items():
+        print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")
+
+def train_dl():
+    dl_datasets = scripts.make_dataset.create_datasets(type='files')
+    # Run the deep learning model with the same simple output format
+    deep_learning_results = scripts.model.run_deep_learning_all_modalities(dl_datasets)
+    print("Deep Learning Model Results (ResNet50):")
+    for modality, metrics in deep_learning_results.items():
+        print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")
+
+def train_dl_fusion():
+    scripts.fusion_model.train_fusion()
+
 if __name__ == "__main__":
     #Loads all data from GCS to data/raw directories
     download_data()
     print("Data download complete.")
+
+    #Trains the naive baseline model and prints results
+    train_naive()
+    print("Naive model training complete and saved for each modality.")
+
+    #Trains the classical model and prints results
+    train_classical()
+    print("Classical model training complete and saved for each modality.")
+
+    #Trains the deep learning model and prints results
+    train_dl()
+    print("Deep learning model training complete and saved for each modality.")
+
+    #Trains the late fusion model and prints results
+    train_dl_fusion()
+    print("Late fusion model training complete and saved.")

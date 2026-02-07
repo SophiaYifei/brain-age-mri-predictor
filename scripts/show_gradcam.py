@@ -177,10 +177,10 @@ if __name__ == "__main__":
     f_model.load_state_dict(torch.load('../models/final_late_fusion_model.pth', map_location=device))
 
     subject_paths = {
-        'T1': '../data/raw/IXI_T1_png/IXI019-Guys-0702-T1.png',
-        'T2': '../data/raw/IXI_T2_png/IXI019-Guys-0702-T2.png',
-        'PD': '../data/raw/IXI_PD_png/IXI019-Guys-0702-PD.png',
-        'MRA': '../data/raw/IXI_MRA_png/IXI019-Guys-0702-MRA.png'
+        'T1': '../data/raw/IXI_T1_png/IXI641-Guys-1105-T1.png',
+        'T2': '../data/raw/IXI_T2_png/IXI641-Guys-1105-T2.png',
+        'PD': '../data/raw/IXI_PD_png/IXI641-Guys-1105-PD.png',
+        'MRA': '../data/raw/IXI_MRA_png/IXI641-Guys-1105-MRA.png'
     }
 
     patient_pil_images = [
@@ -194,7 +194,7 @@ if __name__ == "__main__":
         model=f_model, 
         patient_images=patient_pil_images, 
         transform=model.build_transforms()[1], 
-        true_age=58.65845311430527, 
+        true_age=68.12320328542094, 
         device=device
     )
 

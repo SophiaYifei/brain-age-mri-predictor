@@ -132,7 +132,8 @@ def validate(model, loader, criterion, device):
             val_loss += loss.item()
     return val_loss / len(loader)
 
-if __name__ == "__main__":
+
+def train_fusion():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # 1. Initialize
@@ -144,9 +145,9 @@ if __name__ == "__main__":
 
     data_transforms = model_module.build_transforms()
     
-    train_df = pd.read_csv('train_split.csv')
-    val_df = pd.read_csv('val_split.csv')
-    test_df = pd.read_csv('test_split.csv')
+    train_df = pd.read_csv('../data/labels/train_split.csv')
+    val_df = pd.read_csv('../data/labels/val_split.csv')
+    test_df = pd.read_csv('../data/labels/test_split.csv')
 
     # 2. Data Loaders
     train_ds = MultiModalBrainDataset(train_df, "../data/raw", transform=data_transforms[0])
@@ -184,7 +185,7 @@ if __name__ == "__main__":
         # Save Best Model
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), '../modelsbest_fusion_model.pth')
+            torch.save(model.state_dict(), '../models/final_late_fusion_model.pth')
             print("--> Best Model Saved (Stage 1)")
 
     # --- STAGE 2: Fine-Tuning ---
@@ -213,7 +214,7 @@ if __name__ == "__main__":
 
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), '../models/best_fusion_model.pth')
+            torch.save(model.state_dict(), '../models/final_late_fusion_model.pth')
             print("--> Best Model Saved (Stage 2)")
 
     # Save the final weights after all epochs
@@ -223,3 +224,4 @@ if __name__ == "__main__":
     # Optional: Save the entire model object (architecture + weights)
     # This is useful if you don't want to redefine the class later
     torch.save(model, '../models/full_fusion_model_object.pt')
+    
