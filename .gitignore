@@ -210,6 +210,7 @@ data/raw/
 data/processed/
 
 # Models
+saved_models/
 models/
 
 # Python Cache

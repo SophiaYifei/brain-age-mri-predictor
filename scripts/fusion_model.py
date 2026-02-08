@@ -6,7 +6,7 @@ from PIL import Image
 from torchvision import transforms
 import torch.nn as nn
 from torchvision import models
-import model as model_module
+import scripts.model as model_module
 
 class MultiModalBrainDataset(Dataset):
     def __init__(self, df, root_dir, transform=None):
@@ -125,9 +125,9 @@ def validate(model, loader, criterion, device):
     model.eval()  # Set model to evaluation mode
     val_loss = 0.0
     with torch.no_grad():  # Disable gradient calculation to save memory
-        for t1, t2, pd, mra, age in loader:
-            t1, t2, pd, mra, age = t1.to(device), t2.to(device), pd.to(device), mra.to(device), age.to(device)
-            output = model(t1, t2, pd, mra)
+        for t1, t2, pdi, mra, age in loader:
+            t1, t2, pdi, mra, age = t1.to(device), t2.to(device), pdi.to(device), mra.to(device), age.to(device)
+            output = model(t1, t2, pdi, mra)
             loss = criterion(output.squeeze(), age)
             val_loss += loss.item()
     return val_loss / len(loader)
@@ -138,23 +138,23 @@ def train_fusion():
 
     # 1. Initialize
     model_paths = {
-        'T1': '../models/dl_model_T1.pth', 'T2': '../models/dl_model_T2.pth',
-        'PD': '../models/dl_model_PD.pth', 'MRA': '../models/dl_model_MRA.pth'
+        'T1': 'models/dl_model_T1.pth', 'T2': 'models/dl_model_T2.pth',
+        'PD': 'models/dl_model_PD.pth', 'MRA': 'models/dl_model_MRA.pth'
     }
     model = build_fusion_model(model_paths, device)
 
     data_transforms = model_module.build_transforms()
     
-    train_df = pd.read_csv('../data/labels/train_split.csv')
-    val_df = pd.read_csv('../data/labels/val_split.csv')
-    test_df = pd.read_csv('../data/labels/test_split.csv')
+    train_df = pd.read_csv('data/labels/train_split.csv')
+    val_df = pd.read_csv('data/labels/val_split.csv')
+    test_df = pd.read_csv('data/labels/test_split.csv')
 
     # 2. Data Loaders
-    train_ds = MultiModalBrainDataset(train_df, "../data/raw", transform=data_transforms[0])
+    train_ds = MultiModalBrainDataset(train_df, "data/raw", transform=data_transforms[0])
     train_loader = DataLoader(train_ds, batch_size=8, shuffle=True)
-    val_ds = MultiModalBrainDataset(val_df, "../data/raw", transform=data_transforms[1])
+    val_ds = MultiModalBrainDataset(val_df, "data/raw", transform=data_transforms[1])
     val_loader = DataLoader(val_ds, batch_size=8, shuffle=False)
-    test_ds = MultiModalBrainDataset(test_df, "../data/raw", transform=data_transforms[2])
+    test_ds = MultiModalBrainDataset(test_df, "data/raw", transform=data_transforms[2])
     test_loader = DataLoader(test_ds, batch_size=8, shuffle=False)
 
     # 3. Optimization
@@ -168,10 +168,10 @@ def train_fusion():
     for epoch in range(10):
         model.train()
         train_loss = 0.0
-        for t1, t2, pd, mra, age in train_loader:
-            t1, t2, pd, mra, age = t1.to(device), t2.to(device), pd.to(device), mra.to(device), age.to(device)
+        for t1, t2, pdi, mra, age in train_loader:
+            t1, t2, pdi, mra, age = t1.to(device), t2.to(device), pdi.to(device), mra.to(device), age.to(device)
             optimizer.zero_grad()
-            output = model(t1, t2, pd, mra)
+            output = model(t1, t2, pdi, mra)
             loss = criterion(output.squeeze(), age)
             loss.backward()
             optimizer.step()
@@ -185,7 +185,7 @@ def train_fusion():
         # Save Best Model
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), '../models/final_late_fusion_model.pth')
+            torch.save(model.state_dict(), 'models/final_late_fusion_model.pth')
             print("--> Best Model Saved (Stage 1)")
 
     # --- STAGE 2: Fine-Tuning ---
@@ -198,10 +198,10 @@ def train_fusion():
     for epoch in range(10):
         model.train()
         train_loss = 0.0
-        for t1, t2, pd, mra, age in train_loader:
-            t1, t2, pd, mra, age = t1.to(device), t2.to(device), pd.to(device), mra.to(device), age.to(device)
+        for t1, t2, pdi, mra, age in train_loader:
+            t1, t2, pdi, mra, age = t1.to(device), t2.to(device), pdi.to(device), mra.to(device), age.to(device)
             optimizer.zero_grad()
-            output = model(t1, t2, pd, mra)
+            output = model(t1, t2, pdi, mra)
             loss = criterion(output.squeeze(), age)
             loss.backward()
             optimizer.step()
@@ -214,14 +214,14 @@ def train_fusion():
 
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), '../models/final_late_fusion_model.pth')
+            torch.save(model.state_dict(), 'models/final_late_fusion_model.pth')
             print("--> Best Model Saved (Stage 2)")
 
     # Save the final weights after all epochs
-    torch.save(model.state_dict(), '../models/final_late_fusion_model.pth')
+    torch.save(model.state_dict(), 'models/final_late_fusion_model.pth')
     print("Final model saved as final_late_fusion_model.pth")
 
     # Optional: Save the entire model object (architecture + weights)
     # This is useful if you don't want to redefine the class later
-    torch.save(model, '../models/full_fusion_model_object.pt')
+    torch.save(model, 'models/full_fusion_model_object.pt')
     

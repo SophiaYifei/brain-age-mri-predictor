@@ -49,7 +49,7 @@ def load_image_as_array(file_path, target_size=(224, 224)):
         return np.array(img)
 
 def create_datasets(type='files'):
-    df = pd.read_csv('../IXI_with_filenames.csv')
+    df = pd.read_csv('data/labels/IXI_with_filenames.csv')
     modalities = ['T1', 'T2', 'PD', 'MRA']
 
     datasets = {}
@@ -71,9 +71,9 @@ def create_datasets(type='files'):
     print(f"Train size: {len(train_df)}, Val size: {len(val_df)}, Test size: {len(test_df)}")
 
     # for future use, save the splits
-    train_df.to_csv('../data/labels/train_split.csv', index=False)
-    val_df.to_csv('../data/labels/val_split.csv', index=False)
-    test_df.to_csv('../data/labels/test_split.csv', index=False)
+    train_df.to_csv('data/labels/train_split.csv', index=False)
+    val_df.to_csv('data/labels/val_split.csv', index=False)
+    test_df.to_csv('data/labels/test_split.csv', index=False)
 
     for mod in modalities:
         col_name = f'{mod}_file_name'
@@ -84,21 +84,21 @@ def create_datasets(type='files'):
         
         if type == 'files':
             # Just return filenames
-            X_train = np.array([os.path.join(f'../data/{dirname}/IXI_{mod}_png', fname) for fname in train_df[col_name]])
+            X_train = np.array([os.path.join(f'data/{dirname}/IXI_{mod}_png', fname) for fname in train_df[col_name]])
             y_train = train_df['AGE'].values
-            X_val = np.array([os.path.join(f'../data/{dirname}/IXI_{mod}_png', fname) for fname in val_df[col_name]])
+            X_val = np.array([os.path.join(f'data/{dirname}/IXI_{mod}_png', fname) for fname in val_df[col_name]])
             y_val = val_df['AGE'].values
-            X_test = np.array([os.path.join(f'../data/{dirname}/IXI_{mod}_png', fname) for fname in test_df[col_name]])
+            X_test = np.array([os.path.join(f'data/{dirname}/IXI_{mod}_png', fname) for fname in test_df[col_name]])
             y_test = test_df['AGE'].values
 
             datasets[mod] = (X_train, y_train, X_val, y_val, X_test, y_test)
             
         else:
-            X_train = np.array([load_image_as_array(os.path.join(f'../data/{dirname}/IXI_{mod}_png', fname)) for fname in train_df[col_name]])
+            X_train = np.array([load_image_as_array(os.path.join(f'data/{dirname}/IXI_{mod}_png', fname)) for fname in train_df[col_name]])
             y_train = train_df['AGE'].values
-            X_val = np.array([load_image_as_array(os.path.join(f'../data/{dirname}/IXI_{mod}_png', fname)) for fname in val_df[col_name]])
+            X_val = np.array([load_image_as_array(os.path.join(f'data/{dirname}/IXI_{mod}_png', fname)) for fname in val_df[col_name]])
             y_val = val_df['AGE'].values
-            X_test = np.array([load_image_as_array(os.path.join(f'../data/{dirname}/IXI_{mod}_png', fname)) for fname in test_df[col_name]])
+            X_test = np.array([load_image_as_array(os.path.join(f'data/{dirname}/IXI_{mod}_png', fname)) for fname in test_df[col_name]])
             y_test = test_df['AGE'].values
 
             datasets[mod] = (X_train, y_train, X_val, y_val, X_test, y_test)
