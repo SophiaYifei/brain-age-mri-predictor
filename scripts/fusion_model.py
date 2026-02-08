@@ -8,6 +8,97 @@ import torch.nn as nn
 from torchvision import models
 import scripts.model as model_module
 
+
+# --- Path Setup ---
+# Calculates the path to the 'models' folder relative to this script
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODELS_DIR = os.path.join(REPO_ROOT, "models")
+# This filename must match what download_weights.py saves
+PATH_FUSION = os.path.join(MODELS_DIR, "final_late_fusion_model.pth")
+
+
+# --- Helper Functions ---
+
+def get_transforms():
+    """
+    Standard preprocessing for ResNet.
+    Matches the 'test_transform' used in training.
+    """
+    return transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+    ])
+
+
+# --- Inference Function ---
+
+def predict_fusion_model(image_paths_dict, weights_path=None):
+    """
+    Runs inference using the LateFusionBrainAgeModel.
+    
+    Args:
+        image_paths_dict (dict): Dictionary with keys 'T1', 'T2', 'PD', 'MRA' pointing to image files.
+        weights_path (str, optional): Path to .pth file. Defaults to standard location.
+    
+    Returns:
+        float: Predicted age
+    """
+    if weights_path is None:
+        weights_path = PATH_FUSION
+
+    # Sanity Check
+    if not os.path.exists(weights_path):
+        raise FileNotFoundError(
+            f"Weights not found at {weights_path}. "
+            "Did you run 'python scripts/download_weights.py'?"
+        )
+        
+    device = torch.device("cpu") # Use CPU for inference deployments
+    
+    # 1. Initialize the exact architecture
+    model = LateFusionBrainAgeModel() 
+    
+    # 2. Load Weights
+    # map_location='cpu' is required if model was trained on GPU
+    try:
+        model.load_state_dict(torch.load(weights_path, map_location=device))
+    except RuntimeError as e:
+        # Fallback: Sometimes DataParallel wraps keys with "module."
+        # This handles that case automatically
+        print("Standard load failed, attempting to fix key mismatch...")
+        state_dict = torch.load(weights_path, map_location=device)
+        new_state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+        model.load_state_dict(new_state_dict)
+
+    model.to(device)
+    model.eval()
+    
+    # 3. Preprocess Inputs
+    transform = get_transforms()
+    tensors = []
+    
+    try:
+        # Order matters! Must match forward(x1, x2, x3, x4) -> T1, T2, PD, MRA
+        for mod in ['T1', 'T2', 'PD', 'MRA']:
+            if mod not in image_paths_dict:
+                 raise ValueError(f"Missing image path for {mod}")
+                 
+            img = Image.open(image_paths_dict[mod]).convert('RGB')
+            # Add batch dimension: [1, 3, 224, 224]
+            tensors.append(transform(img).unsqueeze(0).to(device))
+            
+    except Exception as e:
+        raise ValueError(f"Error processing images: {e}")
+        
+    # 4. Predict
+    with torch.no_grad():
+        # Unpack the list of 4 tensors into the forward method
+        output = model(*tensors)
+        
+    return output.item()
+
+
 class MultiModalBrainDataset(Dataset):
     def __init__(self, df, root_dir, transform=None):
         self.df = df
