@@ -28,6 +28,60 @@ from google.cloud import storage
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
+# --- Path Setup ---
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODELS_DIR = os.path.join(REPO_ROOT, "models")
+PATH_T2 = os.path.join(MODELS_DIR, "dl_model_T2.pth")
+
+# --- Architecture ---
+def build_resnet50_regressor():
+    """Helper to build a ResNet50 with 1 output node"""
+    model = resnet50(weights=None)
+    model.fc = nn.Linear(model.fc.in_features, 1)
+    return model
+
+# --- Helper ---
+def get_transforms():
+    return transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+    ])
+
+# --- Inference Function ---
+def predict_t2_model(image_path, weights_path=None):
+    if weights_path is None:
+        weights_path = PATH_T2
+
+    if not os.path.exists(weights_path):
+        raise FileNotFoundError(f"Weights not found at {weights_path}. Run scripts/download_weights.py first.")
+
+    device = torch.device("cpu")
+    # --- DEBUGGING / SAFETY BLOCK ---
+    raw_model_output = build_resnet50_regressor()
+    
+    # Check if the builder returned a tuple (common in old code versions)
+    if isinstance(raw_model_output, tuple):
+        print("⚠️ WARNING: build_resnet50_regressor returned a tuple. Unpacking it...")
+        model = raw_model_output[0] # Take the first item (the model)
+    else:
+        model = raw_model_output
+        
+    print(f"DEBUG: Model type is {type(model)}") # Should be <class 'torchvision.models.resnet.ResNet'>
+    # -------------------------------
+    model.load_state_dict(torch.load(weights_path, map_location=device))
+    model.to(device)
+    model.eval()
+    
+    img = Image.open(image_path).convert('RGB')
+    transform = get_transforms()
+    img_tensor = transform(img).unsqueeze(0).to(device)
+    
+    with torch.no_grad():
+        output = model(img_tensor)
+        
+    return output.item()
+
 # try:
 #     t = torch.from_numpy(np.array([1, 2, 3]))
 #     print("Success: NumPy and PyTorch are talking!")
