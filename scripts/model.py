@@ -59,7 +59,7 @@ def run_all_datasets(run_model_func, datasets):
     results = {}
     for modality, (X_train, y_train, _, _, X_test, y_test) in datasets.items():
         model, rmse, mae = run_model_func(X_train, y_train, X_test, y_test)
-        with open(f"../models/naive_model_{modality}.pkl", "wb") as f:
+        with open(f"models/naive_model_{modality}.pkl", "wb") as f:
             pickle.dump(model, f)
         results[modality] = {'RMSE': rmse, 'MAE': mae}
     return results
@@ -184,7 +184,7 @@ def run_classical_all_modalities(modalities=None):
     for modality in modalities:
         classical_results = run_classical_pipeline(modality=modality)
         row = classical_results[0]
-        with open(f"../models/classical_model_{modality}.pkl", "wb") as f:
+        with open(f"models/classical_model_{modality}.pkl", "wb") as f:
             pickle.dump(row['model'], f)
         results[modality] = {
             "RMSE": row["test_RMSE"],
@@ -359,10 +359,6 @@ def evaluate_regression(all_ages, all_preds):
 
 def run_training_pipeline(
     *,
-    #bucket_name="brain-age-mri-bucket",
-    #gcs_folder_prefix="imgs_folder/",
-    #local_dir="./data/raw",
-    #csv_path="./IXI_with_filenames.csv",
     dataset,
     num_epochs=20,
     batch_size=32,
@@ -438,8 +434,8 @@ def run_deep_learning_all_modalities(datasets, num_epochs=20, batch_size=32, num
             lr=lr,
         )
 
-        torch.save(dl_results["model"].state_dict(), f"../models/dl_model_{modality}.pth")
-        with open(f"../models/dl_model_{modality}_full.pkl", "wb") as f:
+        torch.save(dl_results["model"].state_dict(), f"models/dl_model_{modality}.pth")
+        with open(f"models/dl_model_{modality}_full.pkl", "wb") as f:
             pickle.dump(dl_results["model"], f)
 
         results[modality] = {

@@ -32,9 +32,9 @@ def load_make_dataset_module(repo_root: Path):
 
 def load_split_csvs(repo_root: Path) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load train/val/test splits stored in scripts/."""
-    train_df = pd.read_csv(repo_root / "scripts" / "train_split.csv")
-    val_df = pd.read_csv(repo_root / "scripts" / "val_split.csv")
-    test_df = pd.read_csv(repo_root / "scripts" / "test_split.csv")
+    train_df = pd.read_csv(repo_root / "data" / "labels" / "train_split.csv")
+    val_df = pd.read_csv(repo_root / "data" / "labels" / "val_split.csv")
+    test_df = pd.read_csv(repo_root / "data" / "labels" / "test_split.csv")
     return train_df, val_df, test_df
 
 

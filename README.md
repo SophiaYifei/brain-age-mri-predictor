@@ -15,15 +15,22 @@ source .venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# To install data from cloud storage
+# To install data from cloud storage, and to train and save all model types
+    # Naive Model (4 models trained for each of the 4 modality datasets)
+    # Classical Model (4 models trained for each of the 4 modality datasets)
+    # Deep Learning Model (4 models trained for each of the 4 modality datasets)
+    # Deep Learning Late Fusion Model (1 model trained)
 python setup.py
+
+# To run application
+#[PLACEHOLDER]
 ```
 
 ## Data
-Download the IXI dataset from https://brain-development.org/ixi-dataset/.
+Data has been downloaded from the IXI dataset from https://brain-development.org/ixi-dataset/.
 
-- Choose **T1 images (all images)**.
-- Extract the archive.
-- Place the extracted folder under `data/raw/IXI_T1/`.
+- We have stored the images from the IXI data in a google cloud storage bucket.
+- To download the data from the google cloud storage, run setup.py
 
-After that, you can run the notebooks in `notebooks/`.
+## Models
+[PLACEHOLDER]
