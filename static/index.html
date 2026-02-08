@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BrainAge | MRI Brain Age Predictor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        /* Custom scrollbar for dark mode */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1b2021; }
+        ::-webkit-scrollbar-thumb { background: #51513d; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a6a867; }
+    </style>
+</head>
+<body class="bg-[#1b2021] text-[#e3dc95] font-sans antialiased min-h-screen flex flex-col">
+
+    <nav class="bg-[#1b2021] shadow-lg border-b border-[#51513d] sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="bg-[#51513d] text-[#e3dc95] p-2 rounded-lg border border-[#a6a867]/30">
+                    <i class="fa-solid fa-brain text-xl"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-[#e3dc95] tracking-tight">BrainAge</h1>
+            </div>
+            <span class="text-xs font-bold bg-[#a6a867] text-[#1b2021] px-3 py-1 rounded-full shadow-sm">
+                AIPI 540 • Deep Learning
+            </span>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12 flex-grow">
+        
+        <div class="text-center mb-12">
+            <h2 class="text-4xl font-extrabold text-[#e3dc95] tracking-tight mb-4 drop-shadow-md">
+                Predicting Brain Health with AI
+            </h2>
+            <p class="max-w-2xl mx-auto text-lg text-[#a6a867] font-medium">
+                Upload MRI scans to estimate biological brain age using our state-of-the-art Deep Learning models.
+            </p>
+        </div>
+        
+        <div class="flex justify-center gap-6 mb-8 border-b border-[#51513d]">
+            <button onclick="switchTab('t2')" id="btn-t2" class="pb-3 px-6 text-[#e3dc95] border-b-2 border-[#e3dc95] font-bold text-lg transition-all focus:outline-none hover:bg-[#51513d]/20 rounded-t-lg">
+                <i class="fa-solid fa-bolt mr-2"></i>Quick Scan (T2)
+            </button>
+            <button onclick="switchTab('fusion')" id="btn-fusion" class="pb-3 px-6 text-[#a6a867] hover:text-[#e3dc95] border-b-2 border-transparent font-medium text-lg transition-all focus:outline-none rounded-t-lg">
+                <i class="fa-solid fa-layer-group mr-2"></i>Full Analysis (Fusion)
+            </button>
+        </div>
+
+        <div id="section-t2" class="bg-[#51513d] p-8 rounded-2xl shadow-2xl border border-[#a6a867]/20 transition-all">
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h2 class="text-xl font-bold text-[#e3dc95]">Single Modality Analysis</h2>
+                    <p class="text-[#a6a867] text-sm mt-1">Upload a T2-weighted MRI scan for rapid estimation.</p>
+                </div>
+                <span class="bg-[#1b2021] text-[#a6a867] text-xs font-bold px-3 py-1 rounded border border-[#a6a867]/30">Fast Inference</span>
+            </div>
+
+            <form id="form-t2" class="space-y-6">
+                <div class="border-2 border-dashed border-[#a6a867]/40 rounded-xl p-10 text-center hover:bg-[#1b2021]/30 hover:border-[#e3dc95] transition-all relative group cursor-pointer bg-[#1b2021]/20">
+                    <input type="file" id="file-t2" name="file" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="updateFileName('file-t2', 'name-t2')">
+                    <div class="pointer-events-none">
+                        <i class="fa-solid fa-cloud-arrow-up text-4xl text-[#a6a867] group-hover:text-[#e3dc95] transition-colors mb-4"></i>
+                        <p class="text-base font-bold text-[#e3dc95]">Click to upload T2 Image</p>
+                        <p id="name-t2" class="text-xs text-[#a6a867] mt-2 font-medium">Supports PNG, JPG, NII</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 p-4 bg-[#1b2021]/40 rounded-lg border border-[#a6a867]/20">
+                    <input type="checkbox" id="sample-t2" class="w-5 h-5 text-[#e3dc95] rounded focus:ring-[#e3dc95] bg-[#1b2021] border-[#a6a867]">
+                    <label for="sample-t2" class="text-sm text-[#e3dc95] font-medium cursor-pointer select-none">
+                        Don't have an image? <span class="font-bold text-[#a6a867] hover:text-[#e3dc95] underline decoration-dashed">Use sample patient data</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="w-full py-4 bg-[#e3dc95] hover:bg-[#a6a867] text-[#1b2021] font-bold rounded-xl shadow-lg hover:shadow-xl transition-all flex justify-center items-center gap-2 text-lg transform hover:-translate-y-0.5">
+                    <span>Analyze T2 Scan</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </form>
+        </div>
+
+        <div id="section-fusion" class="hidden bg-[#51513d] p-8 rounded-2xl shadow-2xl border border-[#a6a867]/20">
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h2 class="text-xl font-bold text-[#e3dc95]">Late Fusion Analysis</h2>
+                    <p class="text-[#a6a867] text-sm mt-1">Upload all four modalities for maximum accuracy.</p>
+                </div>
+                <span class="bg-[#e3dc95]/20 text-[#e3dc95] text-xs font-bold px-3 py-1 rounded border border-[#e3dc95]/50">High Accuracy</span>
+            </div>
+
+            <form id="form-fusion" class="space-y-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="p-4 border border-[#a6a867]/30 rounded-lg bg-[#1b2021]/30 hover:border-[#e3dc95] transition-colors group">
+                        <label class="block text-xs font-bold text-[#a6a867] uppercase mb-2 group-hover:text-[#e3dc95]">T1-Weighted</label>
+                        <input type="file" id="file-f-t1" class="block w-full text-sm text-[#a6a867] file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#e3dc95] file:text-[#1b2021] hover:file:bg-[#a6a867] transition-all cursor-pointer">
+                    </div>
+                    <div class="p-4 border border-[#a6a867]/30 rounded-lg bg-[#1b2021]/30 hover:border-[#e3dc95] transition-colors group">
+                        <label class="block text-xs font-bold text-[#a6a867] uppercase mb-2 group-hover:text-[#e3dc95]">T2-Weighted</label>
+                        <input type="file" id="file-f-t2" class="block w-full text-sm text-[#a6a867] file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#e3dc95] file:text-[#1b2021] hover:file:bg-[#a6a867] transition-all cursor-pointer">
+                    </div>
+                    <div class="p-4 border border-[#a6a867]/30 rounded-lg bg-[#1b2021]/30 hover:border-[#e3dc95] transition-colors group">
+                        <label class="block text-xs font-bold text-[#a6a867] uppercase mb-2 group-hover:text-[#e3dc95]">Proton Density</label>
+                        <input type="file" id="file-f-pd" class="block w-full text-sm text-[#a6a867] file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#e3dc95] file:text-[#1b2021] hover:file:bg-[#a6a867] transition-all cursor-pointer">
+                    </div>
+                    <div class="p-4 border border-[#a6a867]/30 rounded-lg bg-[#1b2021]/30 hover:border-[#e3dc95] transition-colors group">
+                        <label class="block text-xs font-bold text-[#a6a867] uppercase mb-2 group-hover:text-[#e3dc95]">MRA</label>
+                        <input type="file" id="file-f-mra" class="block w-full text-sm text-[#a6a867] file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#e3dc95] file:text-[#1b2021] hover:file:bg-[#a6a867] transition-all cursor-pointer">
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 p-4 bg-[#1b2021]/40 rounded-lg border border-[#a6a867]/20">
+                    <input type="checkbox" id="sample-fusion" class="w-5 h-5 text-[#e3dc95] rounded focus:ring-[#e3dc95] bg-[#1b2021] border-[#a6a867]">
+                    <label for="sample-fusion" class="text-sm text-[#e3dc95] font-medium cursor-pointer select-none">
+                        Use sample patient data (All 4 modalities)
+                    </label>
+                </div>
+
+                <button type="submit" class="w-full py-4 bg-[#e3dc95] hover:bg-[#a6a867] text-[#1b2021] font-bold rounded-xl shadow-lg hover:shadow-xl transition-all text-lg transform hover:-translate-y-0.5">
+                    Run Fusion Analysis
+                </button>
+            </form>
+        </div>
+
+        <div id="result-card" class="hidden mt-8 bg-[#1b2021] border border-[#a6a867]/50 rounded-2xl shadow-xl overflow-hidden animate-[fadeIn_0.5s_ease-out]">
+            <div class="flex flex-col md:flex-row">
+                
+                <div class="w-full md:w-1/3 bg-[#1b2021] flex flex-col items-center justify-center p-6 border-b md:border-b-0 md:border-r border-[#51513d]">
+                    
+                    <img id="result-single" src="" alt="MRI Scan" class="hidden max-h-56 w-auto rounded-lg shadow-md object-cover border-2 border-[#51513d]">
+                    
+                    <div id="result-grid" class="hidden grid grid-cols-2 gap-2 w-full max-w-[260px]">
+                        <div class="relative group">
+                            <span class="absolute top-1 left-1 bg-[#e3dc95] text-[#1b2021] text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">T1</span>
+                            <img id="grid-t1" class="w-full h-24 object-cover rounded bg-[#51513d] border border-[#51513d]">
+                        </div>
+                        <div class="relative group">
+                            <span class="absolute top-1 left-1 bg-[#e3dc95] text-[#1b2021] text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">T2</span>
+                            <img id="grid-t2" class="w-full h-24 object-cover rounded bg-[#51513d] border border-[#51513d]">
+                        </div>
+                        <div class="relative group">
+                            <span class="absolute top-1 left-1 bg-[#e3dc95] text-[#1b2021] text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">PD</span>
+                            <img id="grid-pd" class="w-full h-24 object-cover rounded bg-[#51513d] border border-[#51513d]">
+                        </div>
+                        <div class="relative group">
+                            <span class="absolute top-1 left-1 bg-[#e3dc95] text-[#1b2021] text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">MRA</span>
+                            <img id="grid-mra" class="w-full h-24 object-cover rounded bg-[#51513d] border border-[#51513d]">
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="w-full md:w-2/3 p-8 flex flex-col justify-center bg-[#51513d]/10">
+                    <div class="flex items-center gap-2 mb-6">
+                        <div class="h-3 w-3 rounded-full bg-[#e3dc95] shadow-[0_0_10px_#e3dc95] animate-pulse"></div>
+                        <h3 class="text-sm font-bold text-[#a6a867] uppercase tracking-wider">Analysis Complete</h3>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-8 items-end">
+                        <div>
+                            <p class="text-[#e3dc95]/70 text-sm font-bold mb-1 uppercase">Predicted Brain Age</p>
+                            <div class="flex items-baseline gap-2">
+                                <span id="age-display" class="text-6xl font-extrabold text-[#e3dc95] tracking-tight">--</span>
+                                <span class="text-[#a6a867] text-xl font-bold">years</span>
+                            </div>
+                        </div>
+
+                        <div id="true-age-container" class="hidden pl-0 sm:pl-8 sm:border-l border-[#51513d]">
+                            <p class="text-[#a6a867] text-xs font-bold uppercase mb-1">Ground Truth</p>
+                            <div class="flex items-baseline gap-2">
+                                <span id="true-age-display" class="text-3xl font-bold text-[#a6a867]">--</span>
+                                <span class="text-[#a6a867]/50 font-medium">years</span>
+                            </div>
+                            
+                            <div id="error-metric" class="hidden mt-3 inline-flex items-center gap-2 bg-[#1b2021] px-3 py-1.5 rounded-full border border-[#a6a867]">
+                                <span class="text-xs font-bold text-[#a6a867]">GAP:</span>
+                                <span id="error-val" class="text-sm font-bold text-[#e3dc95]">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="error-card" class="hidden mt-8 p-4 bg-[#1b2021] border-l-4 border-red-500 text-red-400 rounded-r-lg text-sm flex items-center gap-3 shadow-lg">
+            <i class="fa-solid fa-circle-exclamation text-xl"></i>
+            <span id="error-message" class="font-medium">An error occurred.</span>
+        </div>
+
+        <div class="mt-16 border-t border-[#51513d] pt-10">
+            <h3 class="text-2xl font-bold text-[#e3dc95] mb-6 flex items-center gap-2">
+                <i class="fa-solid fa-info-circle text-[#a6a867]"></i> About BrainAge
+            </h3>
+            
+            <div class="grid md:grid-cols-2 gap-8">
+                <div class="bg-[#51513d] p-6 rounded-xl shadow-lg border border-[#a6a867]/10">
+                    <h4 class="flex items-center gap-2 font-bold text-[#e3dc95] mb-3 text-lg">
+                        <i class="fa-solid fa-lightbulb text-[#a6a867]"></i>
+                        The Science
+                    </h4>
+                    <p class="text-[#e3dc95]/80 text-sm leading-relaxed mb-4">
+                        "Brain Age" is a biomarker derived from neuroimaging data. The difference between a patient's predicted brain age and their actual chronological age—known as the <span class="font-bold text-[#1b2021] bg-[#e3dc95] px-1 rounded">Brain Age Gap (BAG)</span>—can indicate accelerated aging or resilience against neurodegenerative diseases like Alzheimer's.
+                    </p>
+                </div>
+
+                <div class="bg-[#51513d] p-6 rounded-xl shadow-lg border border-[#a6a867]/10">
+                    <h4 class="flex items-center gap-2 font-bold text-[#e3dc95] mb-3 text-lg">
+                        <i class="fa-solid fa-layer-group text-[#a6a867]"></i>
+                        The Architecture
+                    </h4>
+                    <ul class="space-y-4">
+                        <li class="flex items-start gap-3">
+                            <span class="bg-[#1b2021] text-[#a6a867] text-xs font-bold px-2 py-1 rounded h-fit whitespace-nowrap mt-0.5 border border-[#a6a867]/30">T2 Model</span>
+                            <p class="text-[#e3dc95]/80 text-sm">
+                                A specialized <strong>ResNet50</strong> regressor trained solely on T2-weighted structural MRI scans for rapid, single-modality inference.
+                            </p>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="bg-[#a6a867] text-[#1b2021] text-xs font-bold px-2 py-1 rounded h-fit whitespace-nowrap mt-0.5">Fusion Model</span>
+                            <p class="text-[#e3dc95]/80 text-sm">
+                                A <strong>Late Fusion</strong> architecture that processes T1, T2, PD, and MRA modalities through independent feature extractors before aggregating them for a holistic prediction.
+                            </p>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="mt-12 text-center pt-8 border-t border-[#51513d]">
+                <p class="text-xs text-[#a6a867]/60 font-bold uppercase tracking-widest">
+                    AIPI 540 • Deep Learning Applications • Built with PyTorch & FastAPI
+                </p>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
