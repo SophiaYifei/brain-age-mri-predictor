@@ -1,3 +1,5 @@
+#AI used: Gemini 3 https://gemini.google.com/share/514144793393
+
 import os
 from huggingface_hub import hf_hub_download
 
@@ -15,6 +17,7 @@ FILES_TO_DOWNLOAD = [
 ]
 
 def download_models():
+    """Check for and download model weights from Hugging Face if not already present."""
     print(f"Checking for model weights from {HF_REPO_ID}...")
     
     # Ensure the models directory exists
@@ -42,5 +45,5 @@ def download_models():
 
     print("All inference models are ready!")
 
-if __name__ == "__main__":
-    download_models()
+#if __name__ == "__main__":
+#    download_models()

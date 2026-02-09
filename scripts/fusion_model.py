@@ -1,3 +1,5 @@
+# AI used: Gemini 3 https://gemini.google.com/share/774e5541237c
+
 import os
 import pandas as pd
 import torch
@@ -100,7 +102,11 @@ def predict_fusion_model(image_paths_dict, weights_path=None):
 
 
 class MultiModalBrainDataset(Dataset):
+    """
+    MultiModalBrainDataset brings together all 4 modalities for a single subject as one sample.
+    """
     def __init__(self, df, root_dir, transform=None):
+        """ Standard PyTorch Dataset init. Expects a DataFrame with columns for each modality's filename and the target age. """
         self.df = df
         self.root_dir = root_dir
         self.transform = transform
@@ -108,9 +114,11 @@ class MultiModalBrainDataset(Dataset):
         self.modalities = ['T1', 'T2', 'PD', 'MRA']
 
     def __len__(self):
+        """ Length is just the number of rows in the DataFrame, since each row corresponds to one subject with all modalities. """
         return len(self.df)
 
     def __getitem__(self, idx):
+        """ Gets one sample: all 4 modality images + age for the subject at index idx. """
         row = self.df.iloc[idx]
         images = []
         
@@ -129,19 +137,25 @@ class MultiModalBrainDataset(Dataset):
         return images[0], images[1], images[2], images[3], age
 
 class AddGaussianNoise(object):
+    """ Data augmentation: Adds random Gaussian noise to the input tensor. Useful for regularization and improving robustness. """
     def __init__(self, mean=0.0, std=1.0):
+        """ Initializes the noise parameters. Mean is typically 0, and std controls the noise intensity. """
         self.std = std
         self.mean = mean
 
     def __call__(self, tensor):
+        """ Adds Gaussian noise to the input tensor. The noise is generated with the specified mean and std, and added to the original tensor. """
         return tensor + torch.randn(tensor.size()) * self.std + self.mean
 
     def __repr__(self):
+        """ String representation for debugging. Shows the mean and std of the noise. """
         return self.__class__.__name__ + "(mean={0}, std={1})".format(self.mean, self.std)
 
 
 class LateFusionBrainAgeModel(nn.Module):
+    """ Brain age prediction model using late fusion. Each modality has its own "expert" branch (ResNet50), and their outputs are combined in a "fusion head" to predict age. """
     def __init__(self):
+        """ Initializes the model architecture. We create 4 ResNet50 branches for the 4 modalities, remove their final fully connected layers to get feature vectors, and then define a fusion head that takes all features and outputs a single age prediction. """
         super(LateFusionBrainAgeModel, self).__init__()
         
         # 1. We create 4 "Expert" branches
@@ -174,6 +188,7 @@ class LateFusionBrainAgeModel(nn.Module):
         )
 
     def forward(self, x1, x2, x3, x4):
+        """ Defines the forward pass. Each input corresponds to one modality (T1, T2, PD, MRA). Each modality goes through its own branch to extract features, and then all features are concatenated and passed through the fusion head to get the final age prediction. """
         # Pass each modality through its own expert branch
         feat1 = self.branch_t1(x1)
         feat2 = self.branch_t2(x2)
@@ -188,6 +203,7 @@ class LateFusionBrainAgeModel(nn.Module):
 
 
 def build_fusion_model(model_paths, device):
+    """ Builds the LateFusionBrainAgeModel and loads the pretrained weights for each branch. Initially, all branches are frozen and only the fusion head is trained. After loading weights, the model is moved to the specified device (CPU or GPU). """
     model = LateFusionBrainAgeModel().to(device)
     
     # Mapping model branches to your saved files
@@ -213,6 +229,7 @@ def build_fusion_model(model_paths, device):
     return model
 
 def validate(model, loader, criterion, device):
+    """ Validates the model on the validation set. This is a standard evaluation loop that runs the model in inference mode (no gradients) and calculates the average loss across the validation dataset. """
     model.eval()  # Set model to evaluation mode
     val_loss = 0.0
     with torch.no_grad():  # Disable gradient calculation to save memory
@@ -225,6 +242,7 @@ def validate(model, loader, criterion, device):
 
 
 def train_fusion():
+    """ Trains the LateFusionBrainAgeModel in two stages: first only the fusion head is trained while the branches are frozen, and then the entire network is fine-tuned. The best model based on validation loss is saved to disk. """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # 1. Initialize
