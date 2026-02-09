@@ -1,3 +1,5 @@
+# AI used: Gemini 3 https://gemini.google.com/share/85e7d43a97f8
+
 import model
 import fusion_model
 
@@ -26,15 +28,19 @@ from PIL import Image
 # ======================== Grad-CAM Visualization ========================
 
 class RegressionTarget:
+    """ Custom target for regression tasks in Grad-CAM."""
     def __init__(self):
         pass
     def __call__(self, model_output):
+        """ Model output is a single scalar (predicted age) for regression.
+             We want the gradient w.r.t. this scalar, so we return it directly."""
         # model_output is the predicted age. 
         # We return it directly so the gradient is calculated for the value itself.
         return model_output
 
 
 def get_gradcam_viz(model, input_tensor, original_img):
+    """ Gets the Grad-CAM visualization for a single image and model. """
     # For ResNet50, the last convolutional layer is the end of layer4
     target_layers = [model.layer4[-1]]
 
@@ -109,6 +115,7 @@ def run_gradcam_comparison(patient_image_paths, transform, true_age):
 
 def run_fusion_gradcam(model, patient_images, transform, true_age, device):
     """
+    Runs Grad-CAM for the Late Fusion model across all modalities for a single patient.
     model: The trained LateFusionBrainAgeModel
     patient_images: List of PIL images [T1, T2, PD, MRA]
     """
@@ -138,10 +145,12 @@ def run_fusion_gradcam(model, patient_images, transform, true_age, device):
 
 
         class MultiInputWrapper(torch.nn.Module):
+            """ Multi-input wrapper for Grad-CAM compatibility."""
             def __init__(self, model):
                 super().__init__()
                 self.model = model
             def forward(self, x):
+                """ Gives the full set of inputs to the model, but Grad-CAM will track gradients through the specific branch's target layer."""
                 # x is the concatenated tensor [Batch, 12, H, W]
                 # We split it back into 4 images [Batch, 3, H, W]
                 t1, t2, pd, mra = torch.chunk(x, 4, dim=1)
@@ -149,7 +158,6 @@ def run_fusion_gradcam(model, patient_images, transform, true_age, device):
             
         # 4. Generate CAM for this specific branch
         # We pass the full set of tensors, but Grad-CAM tracks gradients through branches[i]
-        from pytorch_grad_cam import GradCAM
         cam = GradCAM(model=MultiInputWrapper(model), target_layers=target_layers)
         
         # Combine the 4 tensors into one [1, 12, 224, 224] so .to() works
@@ -160,7 +168,6 @@ def run_fusion_gradcam(model, patient_images, transform, true_age, device):
         grayscale_cam = grayscale_cam[0, :]
 
         # 5. Overlay and Plot
-        from pytorch_grad_cam.utils.image import show_cam_on_image
         viz = show_cam_on_image(rgb_img, grayscale_cam, use_rgb=True)
         
         axes[i].imshow(viz)
@@ -171,6 +178,7 @@ def run_fusion_gradcam(model, patient_images, transform, true_age, device):
     plt.tight_layout()
     plt.show()
 
+"""
 if __name__ == "__main__":
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     f_model = fusion_model.LateFusionBrainAgeModel().to(device)
@@ -198,8 +206,7 @@ if __name__ == "__main__":
         device=device
     )
 
-
-    """ run_gradcam_comparison({
+    run_gradcam_comparison({
         'T1': '../data/raw/IXI_T1_png/IXI002-Guys-0828-T1.png',
         'T2': '../data/raw/IXI_T2_png/IXI002-Guys-0828-T2.png',
         'PD': '../data/raw/IXI_PD_png/IXI002-Guys-0828-PD.png',
@@ -218,4 +225,6 @@ if __name__ == "__main__":
         'T2': '../data/raw/IXI_T2_png/IXI019-Guys-0702-T2.png',
         'PD': '../data/raw/IXI_PD_png/IXI019-Guys-0702-PD.png',
         'MRA': '../data/raw/IXI_MRA_png/IXI019-Guys-0702-MRA.png'}, 
-        model.build_transforms()[2], true_age=58.65845311430527) """
+        model.build_transforms()[2], true_age=58.65845311430527) 
+        
+"""

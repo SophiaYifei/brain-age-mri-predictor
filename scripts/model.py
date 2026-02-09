@@ -1,3 +1,8 @@
+# AI used:
+# Gemini 3 https://gemini.google.com/share/4083d152f0f5
+# Gemini 3 https://gemini.google.com/share/2aeb87d22def
+# GPT-5.2 Codex
+
 import numpy as np
 import warnings
 from sklearn.metrics import mean_squared_error, mean_absolute_error
@@ -42,6 +47,7 @@ def build_resnet50_regressor():
 
 # --- Helper ---
 def get_transforms():
+    """ Gets the standard transforms for inference (resize, to tensor, normalize) """
     return transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -50,6 +56,7 @@ def get_transforms():
 
 # --- Inference Function ---
 def predict_t2_model(image_path, weights_path=None):
+    """ Predict age from a single T2 image using the trained ResNet50 model. """
     if weights_path is None:
         weights_path = PATH_T2
 
@@ -62,7 +69,7 @@ def predict_t2_model(image_path, weights_path=None):
     
     # Check if the builder returned a tuple (common in old code versions)
     if isinstance(raw_model_output, tuple):
-        print("⚠️ WARNING: build_resnet50_regressor returned a tuple. Unpacking it...")
+        print("WARNING: build_resnet50_regressor returned a tuple. Unpacking it...")
         model = raw_model_output[0] # Take the first item (the model)
     else:
         model = raw_model_output
@@ -89,18 +96,23 @@ def predict_t2_model(image_path, weights_path=None):
 #     print(f"Still failing: {e}")
 
 #======================= Naive Model ===========================
-class NaiveModel: # the naive baseline model that predicts the average age
+class NaiveModel: 
+    """ The naive baseline model that predicts the average age """
     def __init__(self, avg_age=50):
+        """ Initialize with a default average age (can be updated in fit). """
         self.avg_age = avg_age
     
     def fit(self, X_train, y_train):
+        """ Fit the model by computing the average age from the training labels. """
         self.avg_age = y_train.mean()
 
     def predict(self, X_test):
+        """ Predict the average age for all test samples. """
         n_samples = X_test.shape[0]
         return [self.avg_age] * n_samples
 
 def run_naive_model(X_train, y_train, X_test, y_test):
+    """ Train and evaluate the naive model, returning RMSE and MAE. """
     naive_model = NaiveModel()
     naive_model.fit(X_train, y_train)
     preds = naive_model.predict(X_test)
@@ -110,6 +122,7 @@ def run_naive_model(X_train, y_train, X_test, y_test):
 
 
 def run_all_datasets(run_model_func, datasets):
+    """ Run a given model function across all modalities in the datasets dict. """
     results = {}
     for modality, (X_train, y_train, _, _, X_test, y_test) in datasets.items():
         model, rmse, mae = run_model_func(X_train, y_train, X_test, y_test)
@@ -165,10 +178,12 @@ def train_and_eval_classical_models(
     """Train models and return metrics on val/test splits (RMSE/MAE)."""
     results = []
     for name, model in models_dict.items():
+        # Fit on training data, then predict on validation and test sets
         model.fit(X_train, y_train)
         val_pred = model.predict(X_val)
         test_pred = model.predict(X_test)
 
+        # Compute evaluation metrics for both splits
         val_metrics = evaluate_rmse_mae(y_val, val_pred)
         test_metrics = evaluate_rmse_mae(y_test, test_pred)
 
@@ -194,15 +209,11 @@ def run_classical_pipeline(
 
     Uses precomputed split CSVs under scripts/.
     """
-    #repo_root = Path(__file__).resolve().parents[1]
-    #module_path = repo_root / "scripts" / "build_features.py"
-    #spec = importlib.util.spec_from_file_location("build_features", module_path)
-    #build_features = importlib.util.module_from_spec(spec)
-    #spec.loader.exec_module(build_features)
-
+    # Load preprocessed dataset for the specified modality
     datasets = build_features.build_datasets_from_splits()
     X_train, y_train, X_val, y_val, X_test, y_test = datasets[modality]
-    # Suppress numerical warnings from PCA/linear algebra without altering data.
+    
+    # Apply PCA dimensionality reduction to feature matrices
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
         X_train_pca, X_val_pca, X_test_pca, _ = build_features.get_pca_features(
@@ -212,10 +223,13 @@ def run_classical_pipeline(
             n_components=n_components,
         )
 
+    # Initialize model with best hyperparameters
     models_dict = get_classical_models(
         en_alpha=en_alpha,
         en_l1_ratio=en_l1_ratio,
     )
+    
+    # Train and evaluate on PCA-reduced features
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
         return train_and_eval_classical_models(
@@ -236,10 +250,15 @@ def run_classical_all_modalities(modalities=None):
 
     results = {}
     for modality in modalities:
+        # Train and evaluate for each MRI modality independently
         classical_results = run_classical_pipeline(modality=modality)
         row = classical_results[0]
+        
+        # Save trained model to disk for later inference
         with open(f"models/classical_model_{modality}.pkl", "wb") as f:
             pickle.dump(row['model'], f)
+        
+        # Store test set metrics for comparison with other approaches
         results[modality] = {
             "RMSE": row["test_RMSE"],
             "MAE": row["test_MAE"],
@@ -254,27 +273,34 @@ def run_classical_all_modalities(modalities=None):
 # ======================== Deep Learning Model (ResNet50) ========================
 
 class AddGaussianNoise(object):
+    """Custom transform to add Gaussian noise to images for data augmentation."""
     def __init__(self, mean=0.0, std=1.0):
+        """Initialize with mean and std for the Gaussian noise."""
         self.std = std
         self.mean = mean
 
     def __call__(self, tensor):
+        """Add Gaussian noise to the input tensor."""
         return tensor + torch.randn(tensor.size()) * self.std + self.mean
 
     def __repr__(self):
+        """String representation for debugging."""
         return self.__class__.__name__ + "(mean={0}, std={1})".format(self.mean, self.std)
 
 
 class MRIImageDataset(Dataset):
+    """Custom PyTorch Dataset for loading MRI images and corresponding ages."""
     def __init__(self, image_paths, ages, transform=None):
         self.image_paths = np.array(image_paths)
         self.ages = np.array(ages, dtype=np.float32)
         self.transform = transform
 
     def __len__(self):
+        """ Return the total number of samples in the dataset. """
         return len(self.image_paths)
 
     def __getitem__(self, idx):
+        """ Load an image and its corresponding age, apply transforms, and return them. """
         img_path = str(self.image_paths[idx])
         image = Image.open(img_path).convert("RGB")
         age = float(self.ages[idx])
@@ -286,6 +312,7 @@ class MRIImageDataset(Dataset):
     
 
 def build_transforms():
+    """Build separate transform pipelines for train/val/test splits."""
     train_transform = transforms.Compose(
         [
             transforms.Resize((224, 224)),
@@ -318,17 +345,18 @@ def build_transforms():
     return train_transform, val_transform, test_transform
 
 def build_resnet50_regressor(lr=0.001):
+    """Build a ResNet50 model modified for regression and return it with criterion and optimizer."""
     model = resnet50(pretrained=True)
 
-    #for param in model.parameters():
-    #    param.requires_grad = False
-
+    # Replace the final fully-connected layer for regression (1 output instead of 1000 classes)
     num_ftrs = model.fc.in_features
     model.fc = nn.Linear(num_ftrs, 1)
 
+    # Ensure the final layer is trainable
     for param in model.fc.parameters():
         param.requires_grad = True
 
+    # Use MSELoss for regression tasks
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
@@ -336,20 +364,24 @@ def build_resnet50_regressor(lr=0.001):
 
 
 def make_loaders(X_train, y_train, X_val, y_val, X_test, y_test, batch_size=32, num_workers=2):
+    """Create PyTorch DataLoaders for train/val/test datasets with appropriate transforms."""
     train_transform, val_transform, test_transform = build_transforms()
 
+    # Create dataset objects with appropriate transforms
     train_dataset = MRIImageDataset(X_train, y_train, transform=train_transform)
     val_dataset = MRIImageDataset(X_val, y_val, transform=val_transform)
     test_dataset = MRIImageDataset(X_test, y_test, transform=test_transform)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    # Create data loaders with shuffling enabled for training
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
     return train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset
 
 
 def train_model(model, train_loader, val_loader, train_dataset, val_dataset, criterion, optimizer, num_epochs=20, device=None):
+    """Train the model and return it along with training history and validation predictions."""
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -357,10 +389,9 @@ def train_model(model, train_loader, val_loader, train_dataset, val_dataset, cri
 
     train_losses = []
     val_losses = []
-    all_val_preds = []
-    all_val_ages = []
 
     for epoch in range(num_epochs):
+        # Training phase
         model.train()
         running_train_loss = 0.0
 
@@ -378,6 +409,7 @@ def train_model(model, train_loader, val_loader, train_dataset, val_dataset, cri
         epoch_train_loss = running_train_loss / len(train_dataset)
         train_losses.append(epoch_train_loss)
 
+        # Validation phase
         model.eval()
         running_val_loss = 0.0
         all_val_preds = []
@@ -405,6 +437,7 @@ def train_model(model, train_loader, val_loader, train_dataset, val_dataset, cri
 
 
 def evaluate_regression(all_ages, all_preds):
+    """Compute and return MAE and RMSE for regression predictions."""
     mae = mean_absolute_error(all_ages, all_preds)
     mse = mean_squared_error(all_ages, all_preds)
     rmse = float(np.sqrt(mse))
@@ -419,21 +452,14 @@ def run_training_pipeline(
     num_workers=2,
     lr=0.001,
 ):
-    #make_dataset.download_gcs_folder(bucket_name=bucket_name, gcs_folder_prefix=gcs_folder_prefix, local_dir=local_dir)
-
-    #needed_df = load_dataframe(csv_path=csv_path)
-    #print(needed_df.shape)
-
-    #needed_df = add_image_paths(needed_df, images_dir=local_dir)
-
-    #X_train, X_val, X_test, y_train, y_val, y_test = split_data(needed_df)
-
+    """Run the full training pipeline for one modality's dataset."""
     X_train, y_train, X_val, y_val, X_test, y_test = dataset
 
     print(f"Training set size: {len(X_train)} samples")
     print(f"Validation set size: {len(X_val)} samples")
     print(f"Test set size: {len(X_test)} samples")
 
+    # Create data loaders
     train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset = make_loaders(
         X_train, y_train, X_val, y_val, X_test, y_test, batch_size=batch_size, num_workers=0
     )
@@ -442,6 +468,7 @@ def run_training_pipeline(
     print(f"Validation DataLoader created with {len(val_dataset)} samples and batch size {batch_size}.")
     print(f"Test DataLoader created with {len(test_dataset)} samples and batch size {batch_size}.")
 
+    # Build model with loss function and optimizer
     model, criterion, optimizer = build_resnet50_regressor(lr=lr)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -450,6 +477,7 @@ def run_training_pipeline(
     print("Modified ResNet50 model architecture:")
     print(model)
 
+    # Train the model
     model, train_losses, val_losses, all_val_ages, all_val_preds = train_model(
         model=model,
         train_loader=train_loader,
@@ -462,6 +490,7 @@ def run_training_pipeline(
         device=device,
     )
 
+    # Evaluate on validation set
     mae, rmse = evaluate_regression(all_val_ages, all_val_preds)
     print(f"Mean Absolute Error (MAE): {mae:.4f}")
     print(f"Root Mean Squared Error (RMSE): {rmse:.4f}")
@@ -477,6 +506,7 @@ def run_training_pipeline(
     }
 
 def run_deep_learning_all_modalities(datasets, num_epochs=20, batch_size=32, num_workers=2, lr=0.001):
+    """Run the deep learning training pipeline across all modalities and return RMSE/MAE per modality."""
     results = {}
     for modality, dataset in datasets.items():
         print(f"Running Deep Learning pipeline for modality: {modality}")
@@ -488,10 +518,12 @@ def run_deep_learning_all_modalities(datasets, num_epochs=20, batch_size=32, num
             lr=lr,
         )
 
+        # Save trained model weights and full model
         torch.save(dl_results["model"].state_dict(), f"models/dl_model_{modality}.pth")
         with open(f"models/dl_model_{modality}_full.pkl", "wb") as f:
             pickle.dump(dl_results["model"], f)
 
+        # Store validation metrics
         results[modality] = {
             "MAE": dl_results["MAE"],
             "RMSE": dl_results["RMSE"],
@@ -499,41 +531,8 @@ def run_deep_learning_all_modalities(datasets, num_epochs=20, batch_size=32, num
     return results
 
 
-def predict_age_from_file(
-    image_path,
-    model_weights_path,
-    device=None):
 
-    """
-    Run inference on a single MRI image file.
-    Uses the existing ResNet50 architecture and preprocessing.
-    This is inference-only (no training).
-    """
-
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # Build model architecture
-    model, _, _ = build_resnet50_regressor()
-    model.load_state_dict(torch.load(model_weights_path, map_location=device))
-    model.to(device)
-    model.eval()
-
-    # Use test-time transforms only (no augmentation)
-    _, _, test_transform = build_transforms()
-
-    # Load and preprocess image
-    image = Image.open(image_path).convert("RGB")
-    image = test_transform(image).unsqueeze(0).to(device)
-
-    # Run inference
-    with torch.no_grad():
-        pred = model(image).item()
-
-    return float(pred)
-
-
-# REMOVE THIS BEFORE SUBMITTING
+"""
 if __name__ == "__main__":
 
     datasets = make_dataset.create_datasets()
@@ -557,3 +556,4 @@ if __name__ == "__main__":
     print("Deep Learning Model Results (ResNet50):")
     for modality, metrics in deep_learning_results.items():
         print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")
+"""

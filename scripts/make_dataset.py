@@ -1,3 +1,5 @@
+# AI used: Gemini 3 https://gemini.google.com/share/774e5541237c
+
 import os
 import pandas as pd
 from google.cloud import storage
@@ -42,6 +44,7 @@ def download_gcs_folder(bucket_name, gcs_folder_prefix, local_dir):
             #print(f"Downloaded: {local_file_name}")
 
 def load_image_as_array(file_path, target_size=(224, 224)):
+    """ Load an image file, convert to grayscale, resize, and return as a numpy array."""
     # Load the image, convert to grayscale (L) or RGB (RGB) and all standard size
     with Image.open(file_path) as img:
         img = img.convert('L')
@@ -49,6 +52,7 @@ def load_image_as_array(file_path, target_size=(224, 224)):
         return np.array(img)
 
 def create_datasets(type='files'):
+    """ Returns a dictionary of datasets for each modality. Each entry is a tuple of (X_train, y_train, X_val, y_val, X_test, y_test)."""
     df = pd.read_csv('data/labels/IXI_with_filenames.csv')
     modalities = ['T1', 'T2', 'PD', 'MRA']
 
@@ -79,8 +83,6 @@ def create_datasets(type='files'):
         col_name = f'{mod}_file_name'
 
         dirname = 'raw'
-        #if mod == 'T1':
-        #    dirname = 'processed'
         
         if type == 'files':
             # Just return filenames
@@ -93,7 +95,7 @@ def create_datasets(type='files'):
 
             datasets[mod] = (X_train, y_train, X_val, y_val, X_test, y_test)
             
-        else:
+        else: #Return loaded arrays
             X_train = np.array([load_image_as_array(os.path.join(f'data/{dirname}/IXI_{mod}_png', fname)) for fname in train_df[col_name]])
             y_train = train_df['AGE'].values
             X_val = np.array([load_image_as_array(os.path.join(f'data/{dirname}/IXI_{mod}_png', fname)) for fname in val_df[col_name]])

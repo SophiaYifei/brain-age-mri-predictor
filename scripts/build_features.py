@@ -1,3 +1,5 @@
+# AI used: GPT-5.2 Codex
+
 from __future__ import annotations
 
 import importlib.util

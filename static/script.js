@@ -1,3 +1,4 @@
+// AI used: Gemini 3 https://gemini.google.com/share/ccde5edf4fe6
 // static/script.js
 
 /**

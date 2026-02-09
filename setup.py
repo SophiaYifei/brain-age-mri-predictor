@@ -1,9 +1,12 @@
+# No AI used in this script
+
 import scripts.make_dataset
 import scripts.model
 import scripts.fusion_model
 import os
 
 def download_data():
+    """Download all modality images from GCS if not already present in data/raw."""
     if not os.path.isdir("data/raw"):
       #Load T1 images
       scripts.make_dataset.download_gcs_folder(
@@ -39,6 +42,7 @@ def download_data():
 
 
 def train_naive():
+    """Run the naive baseline model, save the models, and print results."""
     datasets = scripts.make_dataset.create_datasets()
 
     # Run the naive baseline model
@@ -48,6 +52,7 @@ def train_naive():
         print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")
 
 def train_classical():
+    """Run the classical model with PCA features, save the models, and print results."""
     # Run the classical model with the same simple output format
     classical_results = scripts.model.run_classical_all_modalities()
     print("Classical Model Results (PCA features):")
@@ -55,6 +60,7 @@ def train_classical():
         print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")
 
 def train_dl():
+    """Run the deep learning model with ResNet50, save the models, and print results."""
     dl_datasets = scripts.make_dataset.create_datasets(type='files')
     # Run the deep learning model with the same simple output format
     deep_learning_results = scripts.model.run_deep_learning_all_modalities(dl_datasets)
@@ -63,6 +69,7 @@ def train_dl():
         print(f"\t{modality} - RMSE: {metrics['RMSE']:.2f}, MAE: {metrics['MAE']:.2f}")
 
 def train_dl_fusion():
+    """Run the late fusion model, save the model, and print results."""
     scripts.fusion_model.train_fusion()
 
 if __name__ == "__main__":
