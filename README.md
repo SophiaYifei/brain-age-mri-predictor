@@ -1,5 +1,19 @@
 # brain-age-mri-predictor
-Predict brain age from MRI scans using a mix of deep learning and classical ML models. This repository contains data processing helpers, training and inference scripts, pretrained weights, and a small FastAPI inference service.
+
+Predict brain age from MRI scans using a mix of deep learning and classical ML models. 
+This repository contains data processing helpers, training and inference scripts, 
+pretrained weights, and a small FastAPI inference service.
+
+## Key Results
+
+| Model | Best Modality | MAE (years) | RMSE (years) |
+|-------|--------------|-------------|--------------|
+| Naive Baseline | — | 15.24 | 17.19 |
+| Classical (PCA+ElasticNet) | T2 | 11.12 | 12.85 |
+| Deep Learning (ResNet50) | T2 | 7.00 | 8.55 |
+| **Late Fusion (Ours)** | **All 4** | **5.63** | **6.91** |
+
+📄 Please read our full report at `Brain_Age_Prediction_by_MRI.pdf`
 
 **Features**
 - **Multi‑modality:** Supports T1, T2, PD, and MRA modalities used in MRI brain imaging.
