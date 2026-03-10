@@ -4,6 +4,9 @@ Predict brain age from MRI scans using a mix of deep learning and classical ML m
 This repository contains data processing helpers, training and inference scripts, 
 pretrained weights, and a small FastAPI inference service.
 
+**Try the app here!**
+https://github.com/SophiaYifei/brain-age-mri-predictor
+
 **Key Results**
 
 | Model | Best Modality | MAE (years) | RMSE (years) |
