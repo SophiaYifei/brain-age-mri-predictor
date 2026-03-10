@@ -5,7 +5,7 @@ This repository contains data processing helpers, training and inference scripts
 pretrained weights, and a small FastAPI inference service.
 
 **Try the app here!**
-https://github.com/SophiaYifei/brain-age-mri-predictor
+https://huggingface.co/spaces/YifeiGuo/brain-age-mri-predictor
 
 **Key Results**
 
