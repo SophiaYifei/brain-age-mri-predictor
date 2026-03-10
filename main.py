@@ -17,7 +17,7 @@ from scripts.model import predict_t2_model
 # Import Fusion logic from fusion_model.py
 from scripts.fusion_model import predict_fusion_model
 
-app = FastAPI()
+# app = FastAPI()
 
 # Define paths
 REPO_ROOT = Path(__file__).resolve().parent
