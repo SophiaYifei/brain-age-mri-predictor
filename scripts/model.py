@@ -530,7 +530,8 @@ def run_deep_learning_all_modalities(datasets, num_epochs=20, batch_size=32, num
         }
     return results
 
-
+def predict_age_from_file(image_path, model_weights_path=None):
+    return predict_t2_model(image_path, weights_path=model_weights_path)
 
 """
 if __name__ == "__main__":

@@ -32,7 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Where we expect the trained weights to be stored locally.
 # When teammates finish training, place the .pth file here (or update this path).
-WEIGHTS_PATH = REPO_ROOT / "models" / "dl_model_T1.pth"
+WEIGHTS_PATH = REPO_ROOT / "models" / "dl_model_T2.pth"
 
 # If someone visits "/", show a helpful message instead of "Not Found"
 @app.get("/")
