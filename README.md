@@ -26,7 +26,7 @@ https://huggingface.co/spaces/YifeiGuo/brain-age-mri-predictor
 **Quick Links**
 - **Requirements:** [requirements.txt](requirements.txt)
 - **Setup / helpers:** [setup.py](setup.py)
-- **Application:** https://brain-age-mri-predictor-production.up.railway.app/
+- **Application:** https://huggingface.co/spaces/YifeiGuo/brain-age-mri-predictor
 
 **Repository layout (high level)**
 - `data/`: raw images(`data/raw/`) and label CSVs(`data/labels/`).
