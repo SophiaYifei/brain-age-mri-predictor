@@ -69,7 +69,7 @@ python setup.py
 - Run `setup.py` to retrain models to be saved in `models/`.
 
 **Web Application**
-Deployed through Railway on https://brain-age-mri-predictor-production.up.railway.app/
+Deployed through Hugging Face on https://huggingface.co/spaces/YifeiGuo/brain-age-mri-predictor
 
 There are two inference models that users can try. 
 
